@@ -1,0 +1,142 @@
+/*
+ * Base styles for the Drawer component.
+ * Import this file or copy the rules you need.
+ *
+ * CSS custom properties updated at runtime:
+ * --drawer-swipe-x / --drawer-swipe-y: displacement during drag (px)
+ * --drawer-swipe-progress: 0-1, how far toward dismiss
+ * --drawer-swipe-strength: 0.1-1, scalar for velocity-scaled release
+ */
+
+/* --- Overlay --- */
+[data-drawer-overlay] {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	min-height: 100dvh;
+	background-color: var(--color-stone-200);
+	user-select: none;
+	-webkit-user-select: none;
+
+	/* Fade out as user swipes to dismiss */
+	opacity: calc(1 - var(--drawer-swipe-progress, 0));
+	transition: opacity 0.3s ease;
+
+	/* iOS: position:absolute prevents gap behind the status bar */
+	@supports (-webkit-touch-callout: none) {
+		position: absolute;
+	}
+}
+
+/* Instant opacity during active drag */
+[data-drawer-overlay][data-swiping] {
+	transition-duration: 0ms;
+}
+
+/* bits-ui presence states */
+[data-drawer-overlay][data-starting-style] {
+	opacity: 0;
+}
+[data-drawer-overlay][data-ending-style] {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* --- Content (bottom drawer) --- */
+[data-drawer-content] {
+	position: fixed;
+	z-index: 50;
+	background: white;
+	outline: none;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+/*
+ * Bottom drawer positioning.
+ *
+ * The --bleed extends the popup past the bottom viewport edge to prevent
+ * visible gaps during animation overshoot and iOS viewport resizes.
+ * A negative margin shifts the element down; padding-bottom fills the bleed.
+ */
+[data-drawer-content][data-swipe-direction="down"] {
+	--bleed: 3rem;
+
+	bottom: 0;
+	left: 0;
+	right: 0;
+	max-height: calc(96dvh + var(--bleed));
+	margin-bottom: calc(-1 * var(--bleed));
+	padding-bottom: calc(var(--bleed) + env(safe-area-inset-bottom, 0px));
+	border-radius: 12px 12px 0 0;
+
+	transform: translateY(var(--drawer-swipe-y, 0px));
+	transition: transform 450ms cubic-bezier(0.32, 0.72, 0, 1);
+	will-change: transform;
+
+	/* iOS: no bleed needed, native rounded corners */
+	@supports (-webkit-touch-callout: none) {
+		--bleed: 0px;
+		border-radius: 10px;
+	}
+}
+
+/* During active drag: instant transform, no text selection */
+[data-drawer-content][data-swiping] {
+	transition-duration: 0ms;
+	user-select: none !important;
+	-webkit-user-select: none !important;
+}
+
+/* Velocity-scaled dismiss: faster close for fast swipes */
+[data-drawer-content][data-ending-style] {
+	transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+}
+
+/* bits-ui presence states — off-screen position accounts for bleed */
+[data-drawer-content][data-swipe-direction="down"][data-starting-style],
+[data-drawer-content][data-swipe-direction="down"][data-ending-style] {
+	transform: translateY(calc(100% - var(--bleed) + 2px));
+}
+
+/* --- Handle --- */
+[data-drawer-handle] {
+	display: flex;
+	justify-content: center;
+	padding: 12px 0 8px;
+	flex-shrink: 0;
+	cursor: grab;
+	touch-action: none;
+}
+
+[data-drawer-handle]:active {
+	cursor: grabbing;
+}
+
+[data-drawer-handle-hitarea] {
+	width: 36px;
+	height: 5px;
+	border-radius: 9999px;
+	background: rgb(0 0 0 / 0.2);
+}
+
+/* --- Scrollable content area --- */
+/* Add this class to the scrollable part of your drawer content */
+.drawer-scroll-area {
+	flex: 1;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+
+/* --- Dark mode helpers (optional) --- */
+@media (prefers-color-scheme: dark) {
+	[data-drawer-content] {
+		background: #1a1a1a;
+		color: #e5e5e5;
+	}
+	[data-drawer-handle-hitarea] {
+		background: rgb(255 255 255 / 0.3);
+	}
+}
