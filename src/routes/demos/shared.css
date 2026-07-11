@@ -1,0 +1,102 @@
+/* Shared demo chrome — port of the base-ui docs demo Button. */
+
+.demo-page {
+	min-height: 100dvh;
+	padding: 2rem;
+	font-family: system-ui, sans-serif;
+	color: oklch(14.5% 0 0deg);
+	background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+	.demo-page {
+		color: white;
+		background: oklch(14.5% 0 0deg);
+	}
+}
+
+.demo-page h1 {
+	font-size: 1.125rem;
+	margin: 0 0 0.25rem;
+}
+
+.demo-page > p {
+	margin: 0 0 1.5rem;
+	font-size: 0.875rem;
+	color: oklch(43.9% 0 0deg);
+}
+
+@media (prefers-color-scheme: dark) {
+	.demo-page > p {
+		color: oklch(70.8% 0 0deg);
+	}
+}
+
+.demo-back {
+	display: inline-block;
+	margin-bottom: 1.5rem;
+	font-size: 0.875rem;
+	color: inherit;
+}
+
+.demo-button {
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	height: 2rem;
+	padding: 0 0.75rem;
+	margin: 0;
+	border: 1px solid oklch(14.5% 0 0deg);
+	background-color: white;
+	font-family: inherit;
+	font-size: 0.875rem;
+	font-weight: 400;
+	line-height: 1;
+	white-space: nowrap;
+	color: oklch(14.5% 0 0deg);
+	-webkit-user-select: none;
+	user-select: none;
+	cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+	.demo-button {
+		border: 1px solid white;
+		background-color: oklch(14.5% 0 0deg);
+		color: white;
+	}
+}
+
+@media (hover: hover) {
+	.demo-button:hover:not([data-disabled]) {
+		background-color: oklch(97% 0 0deg);
+	}
+	@media (prefers-color-scheme: dark) {
+		.demo-button:hover:not([data-disabled]) {
+			background-color: oklch(26.9% 0 0deg);
+		}
+	}
+}
+
+.demo-button:active:not([data-disabled]) {
+	background-color: oklch(92.2% 0 0deg);
+}
+
+@media (prefers-color-scheme: dark) {
+	.demo-button:active:not([data-disabled]) {
+		background-color: oklch(37.1% 0 0deg);
+	}
+}
+
+.demo-button:focus-visible {
+	outline: 2px solid oklch(14.5% 0 0deg);
+	outline-offset: -1px;
+}
+
+@media (prefers-color-scheme: dark) {
+	.demo-button:focus-visible {
+		outline-color: white;
+	}
+}

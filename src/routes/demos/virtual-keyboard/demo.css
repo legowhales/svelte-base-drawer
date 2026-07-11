@@ -1,0 +1,372 @@
+/* Port of base-ui drawer "virtual keyboard aware" demo. */
+
+.vk-backdrop {
+	--backdrop-opacity: 0.2;
+	--bleed: 3rem;
+	position: fixed;
+	min-height: 100dvh;
+	inset: 0;
+	background-color: black;
+	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress)));
+	transition-duration: 450ms;
+	transition-property: opacity;
+	transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@supports (-webkit-touch-callout: none) {
+	.vk-backdrop {
+		position: absolute;
+	}
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-backdrop {
+		--backdrop-opacity: 0.7;
+	}
+}
+
+.vk-backdrop[data-starting-style],
+.vk-backdrop[data-ending-style] {
+	opacity: 0;
+}
+
+.vk-backdrop[data-swiping] {
+	transition-duration: 0ms;
+}
+
+.vk-backdrop[data-ending-style] {
+	transition-duration: calc(var(--drawer-swipe-strength) * 400ms);
+}
+
+.vk-viewport {
+	--bleed: 3rem;
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	touch-action: none;
+}
+
+.vk-viewport::after {
+	content: '';
+	position: fixed;
+	inset-inline: 0;
+	bottom: 0;
+	height: var(--bleed);
+	background-color: white;
+	pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-viewport::after {
+		background-color: oklch(14.5% 0 0deg);
+	}
+}
+
+.vk-viewport[data-closed]::after {
+	opacity: 0;
+}
+
+/* While swiping, the popup's own bleed covers the bottom edge, so hide the
+   fixed fill — otherwise it paints white over the backdrop once the popup is
+   dragged far enough down. */
+.vk-viewport:has([data-swiping])::after {
+	opacity: 0;
+}
+
+.vk-popup {
+	--bleed: 3rem;
+	--footer-reserved-height: calc(5.25rem + var(--bleed));
+	box-sizing: border-box;
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: calc(100% - 1rem + var(--bleed));
+	max-height: calc(100% - 1rem + var(--bleed));
+	margin-bottom: calc(-1 * var(--bleed));
+	border-top: 1px solid oklch(14.5% 0 0deg);
+	background-color: white;
+	color: oklch(14.5% 0 0deg);
+	outline: 0;
+	overflow: visible;
+	touch-action: none;
+	box-shadow: 0.25rem 0.25rem 0 rgb(0 0 0 / 12%);
+	transition:
+		transform 450ms cubic-bezier(0.32, 0.72, 0, 1),
+		box-shadow 450ms cubic-bezier(0.32, 0.72, 0, 1);
+	transform: translateY(var(--drawer-swipe-movement-y));
+	will-change: transform;
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-popup {
+		border-top: 1px solid white;
+		background-color: oklch(14.5% 0 0deg);
+		color: white;
+		box-shadow: none;
+	}
+}
+
+.vk-popup[data-swiping] {
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.vk-popup[data-starting-style],
+.vk-popup[data-ending-style] {
+	transform: translateY(calc(100% - var(--bleed) + 2px));
+	box-shadow: 0.25rem 0.25rem 0 rgb(0 0 0 / 0%);
+}
+
+.vk-popup[data-ending-style] {
+	transition-duration: calc(var(--drawer-swipe-strength) * 400ms);
+}
+
+.vk-header {
+	position: relative;
+	flex-shrink: 0;
+	padding: 1rem 1.5rem;
+	border-bottom: 1px solid oklch(87% 0 0deg);
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-header {
+		border-bottom: 1px solid oklch(37.1% 0 0deg);
+	}
+}
+
+.vk-header-actions {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.vk-header-button {
+	min-width: 0;
+}
+
+.vk-header-button:first-child {
+	justify-self: start;
+}
+
+.vk-header-button:last-child {
+	justify-self: end;
+}
+
+.vk-handle {
+	position: absolute;
+	top: 0.5rem;
+	left: 50%;
+	width: 3rem;
+	height: 0.25rem;
+	margin: 0;
+	flex-shrink: 0;
+	background-color: oklch(87% 0 0deg);
+	transform: translateX(-50%);
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-handle {
+		background-color: oklch(37.1% 0 0deg);
+	}
+}
+
+.vk-title {
+	margin: 0;
+	font-size: 1rem;
+	line-height: 1.5rem;
+	font-weight: 700;
+	text-align: center;
+	cursor: default;
+}
+
+.vk-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	touch-action: auto;
+	padding: 1rem 1.5rem 1.5rem;
+}
+
+.vk-form {
+	display: grid;
+	gap: 0.75rem;
+	width: 100%;
+	max-width: 22.5rem;
+	margin: 0 auto;
+}
+
+.vk-field {
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+	gap: 0.25rem;
+	width: 100%;
+}
+
+.vk-field-label {
+	font-size: 0.875rem;
+	line-height: 1.25rem;
+	font-weight: 700;
+	color: oklch(14.5% 0 0deg);
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-field-label {
+		color: white;
+	}
+}
+
+.vk-input,
+.vk-textarea,
+.vk-composer-input {
+	box-sizing: border-box;
+	width: 100%;
+	margin: 0;
+	border-radius: 0;
+	border: 1px solid oklch(14.5% 0 0deg);
+	background-color: white;
+	font-family: inherit;
+	font-size: 0.875rem;
+	line-height: 1.25rem;
+	font-weight: 400;
+	color: oklch(14.5% 0 0deg);
+}
+
+@media (any-pointer: coarse) {
+	.vk-input,
+	.vk-textarea,
+	.vk-composer-input {
+		font-size: 1rem;
+		line-height: 1.5rem;
+	}
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-input,
+	.vk-textarea,
+	.vk-composer-input {
+		border: 1px solid white;
+		background-color: oklch(14.5% 0 0deg);
+		color: white;
+	}
+}
+
+.vk-input::placeholder,
+.vk-textarea::placeholder,
+.vk-composer-input::placeholder {
+	color: oklch(55.6% 0 0deg);
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-input::placeholder,
+	.vk-textarea::placeholder,
+	.vk-composer-input::placeholder {
+		color: oklch(70.8% 0 0deg);
+	}
+}
+
+.vk-input:focus,
+.vk-textarea:focus,
+.vk-composer-input:focus {
+	outline: 2px solid oklch(14.5% 0 0deg);
+	outline-offset: -1px;
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-input:focus,
+	.vk-textarea:focus,
+	.vk-composer-input:focus {
+		outline-color: white;
+	}
+}
+
+.vk-input {
+	height: 2rem;
+	padding: 0 0.5rem;
+}
+
+.vk-textarea {
+	min-height: 5.5rem;
+	padding: 0.5rem;
+	resize: vertical;
+}
+
+.vk-composer-input {
+	height: 2.5rem;
+	padding: 0 0.625rem;
+}
+
+.vk-footer-slot {
+	position: relative;
+	flex-shrink: 0;
+	min-height: var(--footer-reserved-height);
+	transition-duration: 260ms;
+	transition-property: min-height;
+	transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.vk-footer-slot:focus-within {
+	min-height: calc(var(--footer-reserved-height) + var(--drawer-keyboard-inset, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vk-footer-slot {
+		transition-duration: 0ms;
+	}
+}
+
+.vk-sticky-footer {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 1;
+	border-top: 1px solid oklch(14.5% 0 0deg);
+	background-color: white;
+	padding: 0.625rem 1.5rem calc(0.625rem + env(safe-area-inset-bottom, 0px) + var(--bleed));
+	transition-duration: 260ms;
+	transition-property: bottom, padding-bottom;
+	transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+	will-change: bottom, padding-bottom;
+}
+
+.vk-sticky-footer:focus-within {
+	position: fixed;
+	z-index: 3;
+	bottom: 0;
+	padding-bottom: calc(
+		0.625rem + env(safe-area-inset-bottom, 0px) + var(--bleed) + var(--drawer-keyboard-inset, 0px)
+	);
+	transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-color-scheme: dark) {
+	.vk-sticky-footer {
+		border-top-color: white;
+		background-color: oklch(14.5% 0 0deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vk-sticky-footer {
+		transition-duration: 0ms;
+	}
+}
+
+.vk-composer {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	width: 100%;
+	max-width: 22.5rem;
+	margin: 0 auto;
+}
