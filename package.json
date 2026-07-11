@@ -3,6 +3,12 @@
 	"version": "0.1.0",
 	"description": "Drawer component for Svelte 5 — a port of Base UI's Drawer built on bits-ui Dialog. Swipe to dismiss, snap points, nested drawers, swipe to open, virtual keyboard support.",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/legowhales/svelte-base-drawer.git"
+	},
+	"homepage": "https://github.com/legowhales/svelte-base-drawer#readme",
+	"bugs": "https://github.com/legowhales/svelte-base-drawer/issues",
 	"type": "module",
 	"svelte": "./dist/index.js",
 	"types": "./dist/index.d.ts",
