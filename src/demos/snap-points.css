@@ -5,6 +5,7 @@
 	position: fixed;
 	min-height: 100dvh;
 	inset: 0;
+	z-index: 50;
 	background-color: black;
 	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress)));
 	transition-duration: 450ms;
@@ -35,6 +36,7 @@
 	--bleed: 3rem;
 	position: fixed;
 	inset: 0;
+	z-index: 50;
 	display: flex;
 	align-items: flex-end;
 	justify-content: center;

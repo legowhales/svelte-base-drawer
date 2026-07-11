@@ -1,9 +1,9 @@
 <script lang="ts">
 	import {
 		DrawerProviderContext,
-		DrawerProviderState,
-	} from "../internal/drawer-provider.svelte.js";
-	import type { Snippet } from "svelte";
+		DrawerProviderState
+	} from '../internal/drawer-provider.svelte.js';
+	import type { Snippet } from 'svelte';
 
 	interface DrawerProviderProps {
 		children?: Snippet;

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Dialog, mergeProps } from "bits-ui";
-	import { DrawerContext } from "../internal/drawer-state.svelte.js";
-	import { untrack } from "svelte";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { Dialog, mergeProps } from 'bits-ui';
+	import { DrawerContext } from '../internal/drawer-state.svelte.js';
+	import { untrack } from 'svelte';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	interface DrawerPopupProps extends HTMLAttributes<HTMLDivElement> {
 		children?: Snippet;
@@ -98,9 +98,9 @@
 			if (cancelled) return;
 			if (!untrack(() => drawer.viewportElement)) {
 				console.warn(
-					"<Drawer.Popup> expected to be rendered within <Drawer.Viewport>. " +
-						"Omitting the viewport disables drawer swipe handling and touch scroll " +
-						"interception. Wrap <Drawer.Popup> in <Drawer.Viewport>."
+					'<Drawer.Popup> expected to be rendered within <Drawer.Viewport>. ' +
+						'Omitting the viewport disables drawer swipe handling and touch scroll ' +
+						'interception. Wrap <Drawer.Popup> in <Drawer.Viewport>.'
 				);
 			}
 		});
@@ -133,22 +133,22 @@
 
 	const popupStyle = $derived.by(() => {
 		const style: Record<string, string> = {
-			"--drawer-swipe-progress": "0",
-			"--drawer-swipe-strength":
-				drawer.swipeRelease !== null && drawer.swipeRelease > 0 ? `${drawer.swipeRelease}` : "1",
-			"--drawer-snap-point-offset":
-				drawer.snapPointOffsetValue !== null ? `${drawer.snapPointOffsetValue}px` : "0px",
-			"--nested-drawers": `${drawer.nestedOpenDrawerCount}`,
+			'--drawer-swipe-progress': '0',
+			'--drawer-swipe-strength':
+				drawer.swipeRelease !== null && drawer.swipeRelease > 0 ? `${drawer.swipeRelease}` : '1',
+			'--drawer-snap-point-offset':
+				drawer.snapPointOffsetValue !== null ? `${drawer.snapPointOffsetValue}px` : '0px',
+			'--nested-drawers': `${drawer.nestedOpenDrawerCount}`
 		};
 
 		// Freeze the measured height while a nested drawer is present or the
 		// drawer is animating out, so CSS can keep sizing stable.
 		const frozen = drawer.hasNestedDrawer || (!drawer.isOpen && drawer.mounted);
 		if (sampledPopupHeight > 0 && frozen) {
-			style["--drawer-height"] = `${sampledPopupHeight}px`;
+			style['--drawer-height'] = `${sampledPopupHeight}px`;
 		}
 		if (sampledFrontmostHeight > 0) {
-			style["--drawer-frontmost-height"] = `${sampledFrontmostHeight}px`;
+			style['--drawer-frontmost-height'] = `${sampledFrontmostHeight}px`;
 		}
 		return style;
 	});
@@ -158,13 +158,13 @@
 	// re-renders don't remove them mid-dismiss.
 	const drawerProps = $derived({
 		style: popupStyle,
-		"data-drawer-popup": "",
-		"data-swipe-direction": drawer.swipeDirection,
-		"data-swiping": drawer.isSwiping ? "" : undefined,
-		"data-expanded": drawer.expanded ? "" : undefined,
-		"data-nested": drawer.nested ? "" : undefined,
-		"data-nested-drawer-open": drawer.nestedOpenDrawerCount > 0 ? "" : undefined,
-		"data-nested-drawer-swiping": drawer.nestedSwiping ? "" : undefined,
+		'data-drawer-popup': '',
+		'data-swipe-direction': drawer.swipeDirection,
+		'data-swiping': drawer.isSwiping ? '' : undefined,
+		'data-expanded': drawer.expanded ? '' : undefined,
+		'data-nested': drawer.nested ? '' : undefined,
+		'data-nested-drawer-open': drawer.nestedOpenDrawerCount > 0 ? '' : undefined,
+		'data-nested-drawer-swiping': drawer.nestedSwiping ? '' : undefined
 	});
 
 	const mergedRestProps = $derived(mergeProps(restProps, drawerProps));

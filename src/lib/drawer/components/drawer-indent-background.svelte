@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { DrawerProviderContext } from "../internal/drawer-provider.svelte.js";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { DrawerProviderContext } from '../internal/drawer-provider.svelte.js';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	interface DrawerIndentBackgroundProps extends HTMLAttributes<HTMLDivElement> {
 		children?: Snippet;
@@ -21,8 +21,8 @@
 <div
 	bind:this={ref}
 	data-drawer-indent-background=""
-	data-active={active ? "" : undefined}
-	data-inactive={!active ? "" : undefined}
+	data-active={active ? '' : undefined}
+	data-inactive={!active ? '' : undefined}
 	{...restProps}
 >
 	{@render children?.()}

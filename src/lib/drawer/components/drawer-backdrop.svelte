@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { Dialog, mergeProps } from "bits-ui";
-	import { DrawerContext } from "../internal/drawer-state.svelte.js";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { Dialog, mergeProps } from 'bits-ui';
+	import { DrawerContext } from '../internal/drawer-state.svelte.js';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	interface DrawerBackdropProps extends HTMLAttributes<HTMLDivElement> {
 		children?: Snippet;
@@ -33,7 +33,7 @@
 	});
 
 	const drawerProps = $derived({
-		"data-drawer-backdrop": "",
+		'data-drawer-backdrop': ''
 	});
 </script>
 

@@ -7,6 +7,8 @@
 	position: fixed;
 	min-height: 100dvh;
 	inset: 0;
+	/* Above in-page positioned elements (e.g. the swipe-to-open edge area). */
+	z-index: 50;
 	background-color: black;
 	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress)));
 	transition-duration: 600ms;
@@ -36,6 +38,7 @@
 .nav-viewport {
 	position: fixed;
 	inset: 0;
+	z-index: 50;
 }
 
 .nav-scroller {

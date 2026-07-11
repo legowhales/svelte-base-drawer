@@ -6,7 +6,7 @@
  * - numbers > 1 are pixel values
  * - strings support `px` and `rem` units
  */
-import { clamp } from "./utils.js";
+import { clamp } from './utils.js';
 
 export type DrawerSnapPoint = number | string;
 
@@ -40,7 +40,7 @@ export function resolveSnapPointValue(
 		return null;
 	}
 
-	if (typeof snapPoint === "number") {
+	if (typeof snapPoint === 'number') {
 		if (!Number.isFinite(snapPoint)) {
 			return null;
 		}
@@ -54,12 +54,12 @@ export function resolveSnapPointValue(
 
 	const trimmed = snapPoint.trim();
 
-	if (trimmed.endsWith("px")) {
+	if (trimmed.endsWith('px')) {
 		const value = Number.parseFloat(trimmed);
 		return Number.isFinite(value) ? value : null;
 	}
 
-	if (trimmed.endsWith("rem")) {
+	if (trimmed.endsWith('rem')) {
 		const value = Number.parseFloat(trimmed);
 		return Number.isFinite(value) ? value * rootFontSize : null;
 	}
@@ -111,7 +111,7 @@ export function resolveSnapPoints(
 			return {
 				value,
 				height: clampedHeight,
-				offset: Math.max(0, popupHeight - clampedHeight),
+				offset: Math.max(0, popupHeight - clampedHeight)
 			};
 		})
 		.filter((point): point is ResolvedDrawerSnapPoint => Boolean(point));

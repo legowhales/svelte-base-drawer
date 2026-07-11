@@ -1,13 +1,10 @@
 <script lang="ts">
-	import { mergeProps } from "bits-ui";
-	import { untrack } from "svelte";
-	import {
-		DrawerContext,
-		registerDrawerCSSProperties,
-	} from "../internal/drawer-state.svelte.js";
-	import { VirtualKeyboardContext } from "../internal/create-virtual-keyboard.svelte.js";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { mergeProps } from 'bits-ui';
+	import { untrack } from 'svelte';
+	import { DrawerContext, registerDrawerCSSProperties } from '../internal/drawer-state.svelte.js';
+	import { VirtualKeyboardContext } from '../internal/create-virtual-keyboard.svelte.js';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	interface DrawerViewportProps extends HTMLAttributes<HTMLDivElement> {
 		children?: Snippet;
@@ -94,16 +91,16 @@
 		mergeProps(
 			restProps,
 			{
-				role: "presentation",
-				"data-drawer-viewport": "",
-				"data-open": drawer.isOpen ? "" : undefined,
-				"data-closed": !drawer.isOpen ? "" : undefined,
+				role: 'presentation',
+				'data-drawer-viewport': '',
+				'data-open': drawer.isOpen ? '' : undefined,
+				'data-closed': !drawer.isOpen ? '' : undefined,
 				// Explicit `auto` while open: bits-ui's modal scroll lock sets
 				// pointer-events: none on <body>, which the viewport would inherit —
 				// wheel/touch scrolling of viewport-level scrollers (mobile-nav
 				// pattern) would only work over the popup. Upstream never disables
 				// body pointer events, so its open viewport is a hit target too.
-				style: drawer.isOpen ? "pointer-events: auto" : "pointer-events: none",
+				style: drawer.isOpen ? 'pointer-events: auto' : 'pointer-events: none'
 			},
 			gestureHandlers
 		)

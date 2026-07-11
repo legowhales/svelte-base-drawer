@@ -1,1 +1,2 @@
-// place files you want to import through the `$lib` alias in this folder.
+// Package entry: `import * as Drawer from "svelte-base-drawer"`.
+export * from './drawer/index.js';

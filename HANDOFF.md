@@ -13,12 +13,14 @@ Port du composant **Drawer de base-ui** (React, `@base-ui/react`) vers
 focus trap, escape, outside-press, portal, presence/transitions).
 
 **Référence upstream : base-ui v1.6.0** — fichiers sources de référence :
+
 - `packages/react/src/drawer/**` (tous les composants)
 - `packages/react/src/utils/useSwipeDismiss.ts` (moteur de gestes)
 - `packages/react/src/utils/scrollable.ts`
 - Démos : `docs/src/app/(docs)/react/components/drawer/demos/**`
 
 Pour re-cloner la référence :
+
 ```bash
 git clone --depth 1 --branch v1.6.0 --filter=blob:none --sparse https://github.com/mui/base-ui.git
 cd base-ui && git sparse-checkout set packages/react/src/drawer packages/react/src/utils "docs/src/app/(docs)/react/components/drawer"
@@ -35,7 +37,10 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
 - **Phase 2** : snap points, nested drawers, SwipeArea (swipe-to-open),
   Provider/Indent/IndentBackground, VirtualKeyboardProvider, CloseWatcher
   Android, CSS 4 directions.
-- **7 démos** portées depuis la doc base-ui sous `src/routes/demos/*`.
+- **8 démos** (basique + 7 portées de la doc base-ui) sous `src/demos/*`,
+  toutes affichées sur la page de doc unique (`src/routes/+page.svelte`).
+- **Packagé pour npm** sous le nom `svelte-base-drawer` (voir §6, entrée
+  "Publication npm").
 - `npm run check` : 0 erreur, 0 warning.
 - Vérifié par gestes simulés en navigateur (voir §7) : snap back, dismiss
   vélocité-scalé, expand/collapse entre snap points, stacking nested à 3
@@ -45,23 +50,40 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
 ## 3. Anatomie et API publique
 
 ```svelte
-<Drawer.Root bind:open bind:snapPoint {snapPoints} snapToSequentialPoints
-             swipeDirection="down" onOpenChange onSnapPointChange>
-  <Drawer.Trigger />                  <!-- re-export bits-ui -->
-  <Drawer.SwipeArea />                <!-- optionnel : ouverture par swipe depuis un bord -->
-  <Drawer.VirtualKeyboardProvider>    <!-- optionnel : clavier virtuel mobile -->
-    <Drawer.Portal to={container}>    <!-- re-export bits-ui -->
-      <Drawer.Backdrop forceRender={false} />
-      <Drawer.Viewport>               <!-- OBLIGATOIRE : host de tous les gestes -->
-        <Drawer.Popup trapFocus preventScroll>  <!-- le panneau (bits-ui Dialog.Content) -->
-          <Drawer.Handle />
-          <Drawer.Title /> <Drawer.Description /> <Drawer.Close />  <!-- re-exports -->
-          <Drawer.Content />          <!-- zone scrollable ([data-drawer-content]) -->
-        </Drawer.Popup>
-      </Drawer.Viewport>
-    </Drawer.Portal>
-  </Drawer.VirtualKeyboardProvider>
-  <!-- Provider/Indent/IndentBackground s'utilisent AUTOUR du Root (voir démo indent) -->
+<Drawer.Root
+	bind:open
+	bind:snapPoint
+	{snapPoints}
+	snapToSequentialPoints
+	swipeDirection="down"
+	onOpenChange
+	onSnapPointChange
+>
+	<Drawer.Trigger />
+	<!-- re-export bits-ui -->
+	<Drawer.SwipeArea />
+	<!-- optionnel : ouverture par swipe depuis un bord -->
+	<Drawer.VirtualKeyboardProvider>
+		<!-- optionnel : clavier virtuel mobile -->
+		<Drawer.Portal to={container}>
+			<!-- re-export bits-ui -->
+			<Drawer.Backdrop forceRender={false} />
+			<Drawer.Viewport>
+				<!-- OBLIGATOIRE : host de tous les gestes -->
+				<Drawer.Popup trapFocus preventScroll>
+					<!-- le panneau (bits-ui Dialog.Content) -->
+					<Drawer.Handle />
+					<Drawer.Title />
+					<Drawer.Description />
+					<Drawer.Close />
+					<!-- re-exports -->
+					<Drawer.Content />
+					<!-- zone scrollable ([data-drawer-content]) -->
+				</Drawer.Popup>
+			</Drawer.Viewport>
+		</Drawer.Portal>
+	</Drawer.VirtualKeyboardProvider>
+	<!-- Provider/Indent/IndentBackground s'utilisent AUTOUR du Root (voir démo indent) -->
 </Drawer.Root>
 ```
 
@@ -71,22 +93,24 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
 (sémantique upstream).
 
 ### CSS vars (registerProperty, inherits: false)
-| Var | Élément | Rôle |
-|---|---|---|
-| `--drawer-swipe-movement-x/-y` | popup | déplacement pendant le drag (px) |
-| `--drawer-swipe-progress` | backdrop (+ popup parent si nested, + indent) | 0–1 fade |
-| `--drawer-swipe-strength` | popup ET backdrop | 0.1–1, scalaire durée du dismiss |
-| `--drawer-snap-point-offset` | popup | offset du snap point actif (px) |
-| `--drawer-height` | popup (gelé si nested/ending), backdrop, indent | hauteur mesurée |
-| `--drawer-frontmost-height` | popup | hauteur du drawer le plus en avant du stack |
-| `--nested-drawers` | popup | nombre de drawers imbriqués ouverts (récursif) |
-| `--drawer-keyboard-inset` | viewport | inset clavier virtuel (VirtualKeyboardProvider) |
+
+| Var                            | Élément                                         | Rôle                                            |
+| ------------------------------ | ----------------------------------------------- | ----------------------------------------------- |
+| `--drawer-swipe-movement-x/-y` | popup                                           | déplacement pendant le drag (px)                |
+| `--drawer-swipe-progress`      | backdrop (+ popup parent si nested, + indent)   | 0–1 fade                                        |
+| `--drawer-swipe-strength`      | popup ET backdrop                               | 0.1–1, scalaire durée du dismiss                |
+| `--drawer-snap-point-offset`   | popup                                           | offset du snap point actif (px)                 |
+| `--drawer-height`              | popup (gelé si nested/ending), backdrop, indent | hauteur mesurée                                 |
+| `--drawer-frontmost-height`    | popup                                           | hauteur du drawer le plus en avant du stack     |
+| `--nested-drawers`             | popup                                           | nombre de drawers imbriqués ouverts (récursif)  |
+| `--drawer-keyboard-inset`      | viewport                                        | inset clavier virtuel (VirtualKeyboardProvider) |
 
 ### Data attributes
+
 - Popup : `data-drawer-popup`, `data-swipe-direction`, `data-swiping`,
   `data-expanded` (snap === 1), `data-nested`, `data-nested-drawer-open`,
   `data-nested-drawer-swiping`, `data-swipe-dismiss` (impératif),
-  + ceux de bits-ui (`data-starting-style`, `data-ending-style`…).
+  - ceux de bits-ui (`data-starting-style`, `data-ending-style`…).
 - Backdrop : `data-drawer-backdrop`, `data-swiping`, `data-swipe-dismiss`.
 - Viewport : `data-drawer-viewport`, `data-open`/`data-closed`.
 - SwipeArea : `data-drawer-swipe-area`, `data-open`/`data-closed`,
@@ -98,6 +122,7 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
 ## 4. Carte des fichiers
 
 ### `src/lib/drawer/internal/`
+
 - **`create-swipe-gesture.svelte.ts`** — moteur de gestes. Port ligne-à-ligne
   de `useSwipeDismiss` v1.6.0 : transform initial composé
   (`translate3d(initial+delta) scale(scale)`), snapshot/restore des styles
@@ -153,6 +178,7 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   NotFoundError), sélecteurs `data-swipe-ignore`/`data-drawer-content`.
 
 ### `src/lib/drawer/components/`
+
 - **`drawer-root.svelte`** — props open/snapPoint ($bindable), crée le state
   (lit les contextes parent/provider AVANT de poser le sien), box `open` dont
   le setter est LE chemin unique de notification interne (swipe dismiss,
@@ -206,17 +232,20 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   rien à voir).
 
 ### Autres
+
 - **`src/lib/drawer/drawer.css`** — CSS de départ opt-in pour consommateurs
   (sélecteurs d'attributs, 4 directions, bleed, presence states).
   ⚠️ PAS importé par les pages de démo (voir pièges).
-- **`src/lib/drawer/index.ts`** — exports.
-- **`src/routes/+page.svelte`** — index : drawer basique (classes `.basic-*`)
-  + liens vers les démos.
-- **`src/routes/demos/{snap-points,nested,virtual-keyboard,indent,mobile-nav,swipe-to-open,action-sheet}/`**
-  — ports fidèles des démos de la doc base-ui, chacune `+page.svelte` +
-  `demo.css` avec classes préfixées (`.snap-*`, `.nested-*`, `.vk-*`,
-  `.indent-*`, `.nav-*`, `.swipe-*`, `.sheet-*`) + `demos/shared.css`
-  (`.demo-button`, `.demo-page`).
+- **`src/lib/drawer/index.ts`** — exports du module drawer.
+- **`src/lib/index.ts`** — entrée du package npm (`export * from "./drawer"`);
+  c'est ce fichier que `svelte-package` publie comme `dist/index.js`.
+- **`src/routes/+page.svelte`** — page de doc unique : intro/install/usage,
+  les 8 démos en sections, référence CSS vars + data attributes, crédits.
+- **`src/demos/`** — composants de démo réutilisés par la page de doc :
+  `Basic/SnapPoints/Nested/VirtualKeyboard/Indent/MobileNav/SwipeToOpen/ActionSheet.svelte`
+  - CSS préfixé par démo (`.basic-*`, `.snap-*`, `.nested-*`, `.vk-*`,
+    `.indent-*`, `.nav-*`, `.swipe-*`, `.sheet-*`) + `shared.css`
+    (`.demo-button`, `.demo-page`). Hors de `src/lib` pour ne pas être packagés.
 
 ## 5. Invariants et pièges (NE PAS RÉINTRODUIRE)
 
@@ -305,6 +334,14 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   (toutes les routes prérendues via `src/routes/+layout.ts`).
   `npm run build` puis `sher link --no-build --dir build` (CLI sher.sh,
   `sher login` requis) → URL éphémère 24h.
+- **Publication npm** : le package est prêt (`svelte-base-drawer@0.1.0`,
+  nom vérifié disponible le 2026-07-12). `npm run package` construit `dist/`
+  (`svelte-package`) et lance `publint` ; `npm publish` déclenche tout via
+  `prepack`. bits-ui et svelte sont en `peerDependencies`, `drawer.css`
+  exporté sous `svelte-base-drawer/drawer.css` (rendu autonome : la var
+  Tailwind `--color-stone-200` a été remplacée par sa valeur littérale).
+  Manque avant publication réelle : champ `repository` (pas de remote git),
+  et trancher le naming `Drawer.Handle` (voir plus bas).
 - **Démo indent** : la mécanique est validée (data-active, portal local,
   scale) mais le layout du cadre mérite un polish visuel (positionnement du
   popup dans le petit cadre).
@@ -326,7 +363,8 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
 ## 7. Comment vérifier (recettes de test)
 
 - `npm run check` — 0 erreur attendu.
-- `npm run dev` → `http://localhost:5173` (index + 7 démos).
+- `npm run package` — build du package + publint, "All good!" attendu.
+- `npm run dev` → `http://localhost:5173` (page de doc unique, 8 démos).
 - **⚠️ Piège majeur : onglet en arrière-plan.** `requestAnimationFrame` ne
   tourne pas dans un onglet masqué → bits-ui ne retire jamais
   `data-starting-style` et le drawer semble figé à sa position d'entrée. Ce
@@ -338,9 +376,19 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   sur le backdrop et n'atteignent jamais les handlers du viewport) :
   ```js
   const popup = document.querySelector('[data-drawer-popup]');
-  const ev = (type, x, y, buttons) => new PointerEvent(type, { bubbles: true,
-    cancelable: true, clientX: x, clientY: y, button: 0, buttons,
-    pointerId: 1, pointerType: 'mouse', isPrimary: true, view: window });
+  const ev = (type, x, y, buttons) =>
+  	new PointerEvent(type, {
+  		bubbles: true,
+  		cancelable: true,
+  		clientX: x,
+  		clientY: y,
+  		button: 0,
+  		buttons,
+  		pointerId: 1,
+  		pointerType: 'mouse',
+  		isPrimary: true,
+  		view: window
+  	});
   document.elementFromPoint(x, y0).dispatchEvent(ev('pointerdown', x, y0, 1));
   for (const y of steps) popup.dispatchEvent(ev('pointermove', x, y, 1));
   popup.dispatchEvent(ev('pointerup', x, yEnd, 0));
@@ -355,7 +403,7 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   `--drawer-swipe-movement-y`, `data-swiping` sur popup+backdrop,
   `--drawer-swipe-progress` sur le backdrop. Au release-dismiss →
   `data-swipe-dismiss` + `data-ending-style` + `--drawer-swipe-strength`
-  posés synchroniquement sur popup ET backdrop. Snap → 
+  posés synchroniquement sur popup ET backdrop. Snap →
   `--drawer-snap-point-offset`, `data-expanded`.
 
 ## 8. Historique des sessions (2026-07-11)
@@ -381,3 +429,30 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
    ne s'empilait plus à la réouverture) ; body `pointer-events: none` du
    scroll lock (→ viewport auto quand open, piège n°14 — molette partout
    dans mobile-nav).
+5. **Packaging npm + doc unique (2026-07-12)** : package `svelte-base-drawer`
+   (bits-ui/svelte en peerDependencies, `svelte-toolbelt` retiré — inutilisé,
+   exports `.` + `./drawer.css`, `files: dist`, publint OK, tarball 48 ko) ;
+   entrée `src/lib/index.ts` ; démos extraites en composants `src/demos/*`
+   affichés sur une page de doc unique ; README npm + LICENSE (MIT, crédit
+   Base UI © Material-UI SAS) ; favicon déplacé de `src/lib/assets` vers
+   `static/`. Vérifié : les 8 démos s'ouvrent/ferment sur la page combinée,
+   stacking nested OK, focus intercepté (scrollTop 0). Piège pane re-confirmé :
+   compositeur du navigateur intégré gelé → portal bits-ui ne monte pas
+   (rAF starvation) ; un resize_window relance les frames.
+6. **Retouches page unique (2026-07-12)** : `z-index: 50` ajouté sur
+   backdrop+viewport des 5 démos plein écran (mobile-nav, snap-points, nested,
+   virtual-keyboard, action-sheet) — en pages séparées rien ne se chevauchait,
+   mais sur la page combinée le `.swipe-area` (z-index 1, positionné) passait
+   au-dessus des drawers en `z-index: auto` et intercept les clics (bouton « x »
+   du mobile-nav). Démo basic réécrite dans le langage visuel commun
+   (`src/demos/basic.css`, bordure noire/ombre dure) avec contenu réaliste :
+   email en tête, texte scrollable, second input, Close.
+7. **Fix cible SVG dans `getTargetAtPoint`** : le port filtrait le target avec
+   `isHTMLElement` là où l'upstream ne fait qu'un cast TypeScript. Un clic
+   pointer sur une icône `<svg>` dans un bouton (le « x » du mobile-nav)
+   donnait donc `target: null` → le sélecteur d'ignore interactif ne matchait
+   pas → un swipe démarrait avec `setPointerCapture` et le `click` re-ciblé
+   n'atteignait jamais le bouton Close. Corrigé : narrowing sur `Element`
+   (dont `closest()` suffit), `hasScrollableAncestor` accepte `Element`.
+   Note : un vrai drag long depuis un bouton engage quand même un swipe via le
+   re-attempt pending — c'est le comportement upstream, ne pas « corriger ».

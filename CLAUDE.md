@@ -5,11 +5,13 @@
 > l'onglet caché), et liste des points restants à corriger.
 
 ## Contexte
+
 Port du composant Drawer de base-ui (React) vers Svelte 5, en utilisant bits-ui Dialog comme fondation.
 Le code source est dans `src/lib/drawer/`.
 **Référence upstream : base-ui v1.6.0** (`packages/react/src/drawer/` + `packages/react/src/utils/useSwipeDismiss.ts`).
 
 ## Architecture
+
 - `internal/create-swipe-gesture.svelte.ts` — moteur de gestes, port fidèle de `useSwipeDismiss` v1.6.0
 - `internal/create-drawer-touch-scroll.svelte.ts` — interception touch (scroll vs swipe), port du handler natif de `DrawerViewport`
 - `internal/create-virtual-keyboard.svelte.ts` — port de `DrawerVirtualKeyboardProvider` (clavier virtuel mobile)
@@ -18,6 +20,7 @@ Le code source est dans `src/lib/drawer/`.
 - `components/` — composants Svelte qui wrappent bits-ui Dialog
 
 ## Anatomie (alignée base-ui v1.6.0)
+
 ```
 Drawer.Root                     → contexte + bits-ui Dialog.Root
   Drawer.Trigger                → re-export bits-ui
@@ -30,15 +33,18 @@ Drawer.Root                     → contexte + bits-ui Dialog.Root
           Drawer.Title / Description / Close (re-exports bits-ui)
           Drawer.Content        → zone scrollable ([data-drawer-content], touch-action: auto)
 ```
+
 ⚠️ Ne pas confondre avec l'ancienne V1 : notre ancien `Drawer.Content` est devenu `Drawer.Popup` ; `Drawer.Overlay` est devenu `Drawer.Backdrop`. `Drawer.Content` désigne maintenant la zone scrollable (comme upstream).
 
 ## Stack
+
 - Svelte 5 avec runes ($state, $effect, $derived)
 - bits-ui (pattern classes State + Context de runed)
 - `untrack` pour lire l'état dans les handlers sans tracking
 - Le Viewport est rendu via `{#if drawer.mounted}` où `mounted = open || popupElement !== null` (suit la présence bits-ui pendant l'animation de sortie)
 
 ## CSS vars (alignées upstream, registerProperty inherits:false)
+
 - `--drawer-swipe-movement-x` / `-y` : déplacement pendant le drag (sur le popup)
 - `--drawer-swipe-progress` : 0-1 (sur le backdrop)
 - `--drawer-swipe-strength` : 0.1-1, scalaire de durée du dismiss (posé sur popup ET backdrop — inherits:false oblige)
@@ -56,14 +62,27 @@ nested drawers (stacking, `--nested-drawers` récursif, gel de hauteur,
 scroll lock bits-ui actif (`preventScroll`, compatible interception touch — le
 listener iOS de bits-ui ne bloque que `documentElement`), 4 directions en CSS.
 
-Les 7 démos de la doc base-ui sont portées sous `src/routes/demos/*`
-(snap-points, nested, virtual-keyboard, indent, mobile-nav, swipe-to-open,
-action-sheet) avec CSS préfixé par démo (PAS le drawer.css de la lib — ses
-sélecteurs d'attributs écraseraient les classes).
+Les 8 démos (basique + 7 ports de la doc base-ui : snap-points, nested,
+virtual-keyboard, indent, mobile-nav, swipe-to-open, action-sheet) sont des
+composants sous `src/demos/*`, tous affichés sur la page de doc unique
+`src/routes/+page.svelte`, avec CSS préfixé par démo (PAS le drawer.css de la
+lib — ses sélecteurs d'attributs écraseraient les classes).
+
+## Package npm
+
+Le projet est packagé sous le nom **`svelte-base-drawer`** (v0.1.0, nom npm
+vérifié disponible) : entrée `src/lib/index.ts` → `dist/` via
+`npm run package` (`svelte-package` + `publint`). `bits-ui` et `svelte` sont
+en **peerDependencies** (le package s'installe à côté d'un bits-ui existant).
+Exports : `.` (composants) et `./drawer.css` (feuille de départ, autonome —
+pas de dépendance Tailwind). `npm publish` passe par `prepack`. README npm en
+anglais + LICENSE MIT avec crédit Base UI (© Material-UI SAS). Les démos
+(`src/demos/`) et routes sont hors package (`files: ["dist"]`).
 
 ## Historique Phase 1 (socle)
 
 ### Parité moteur avec useSwipeDismiss v1.6.0
+
 - **Transform initial composé** : snapshot du transform courant (translate+scale) au start, drag = `translate3d(initial+delta) scale(scale)` ; vars = delta ; progress = displacement/(size×scale). Attraper le drawer en pleine animation ne saute plus.
 - **Snapshot/restore des styles inline** (transition/transform) au lieu de removeProperty.
 - **Commit du release sur `buttons===0`** (#5057) : le move final traverse le pipeline (déplacement + vélocité pic conservés) puis handleEnd. Cancel si bouton non-primaire.
@@ -74,15 +93,19 @@ sélecteurs d'attributs écraseraient les classes).
 - **Reverse-cancel** : baseline re-ancrée à chaque inversion, un-cancel au-delà du swipeThreshold complet.
 
 ### Pilotage natif du touch (#4980)
+
 Un SEUL handler natif capture `touchmove` (document, passive:false) décide preventDefault/stopPropagation ET pilote le moteur via `moveNative`. Plus de double chemin élément/document. Les handlers d'élément ne gèrent que touchstart/end/cancel.
 
 ### Dismiss synchrone
+
 Au release décidé : `data-swipe-dismiss` + `data-ending-style` posés synchroniquement sur popup ET backdrop, transition inline retirée, `--drawer-swipe-strength` posé sur les deux (fade backdrop synchronisé avec le popup). Revert via rAF si le consommateur contrôlé rejette la fermeture. Ces attributs sont gérés IMPÉRATIVEMENT (jamais dans les templates Svelte, sinon un re-render les retire en plein dismiss).
 
 ### Swipe pointer (desktop)
+
 Les handlers pointer sont sur le **Viewport**, gated non-touch. Le swipe ne démarre jamais depuis `[data-drawer-content]` (la sélection de texte à la souris y reste possible) ni depuis un élément interactif. `canStart` exige elementFromPoint dans le popup.
 
 ### VirtualKeyboardProvider (porté de #4353)
+
 - `--drawer-keyboard-inset` via `visualViewport` (seuil 60px pour distinguer clavier / chrome navigateur)
 - Scroll slack : padding-bottom + scroll-padding-bottom + overflow-anchor:none injectés sur le conteneur scrollable
 - Centrage smooth du champ focusé (respecte prefers-reduced-motion)
@@ -90,13 +113,14 @@ Les handlers pointer sont sur le **Viewport**, gated non-touch. Le swipe ne dém
 - Branché via `VirtualKeyboardContext` lu par le Viewport, hooks appelés depuis touchstart/end/cancel élément et le touchmove natif
 
 ### onOpenChange
+
 Chemin unique : le setter du box `open` (swipe dismiss) OU le prop onOpenChange passé à Dialog.Root (escape/outside/close). Plus de double appel.
 
 ## Pièges résolus (à ne pas réintroduire)
-- **Notifications cross-state dans les $effect** : un `$effect` qui appelle une méthode
-  lisant PUIS écrivant le même signal (ex: `parent.onNestedOpenChange` et
-  `nestedOpenDrawerCount`) s'auto-invalide → boucle infinie silencieuse (l'erreur
-  effect_update_depth n'apparaît qu'en console). Toujours `untrack()` les appels de
+
+- **Notifications cross-state dans les $effect** : un `$effect`qui appelle une méthode
+lisant PUIS écrivant le même signal (ex:`parent.onNestedOpenChange`et`nestedOpenDrawerCount`) s'auto-invalide → boucle infinie silencieuse (l'erreur
+effect_update_depth n'apparaît qu'en console). Toujours `untrack()` les appels de
   notification dans les effects, et untrack la lecture dans les méthodes compteur.
 - **Reset du snap point à la FERMETURE, pas à l'ouverture** (parité upstream) : un reset
   on-open depuis un effect du viewport peut re-tourner après un release et écraser le
@@ -133,10 +157,13 @@ Chemin unique : le setter du box `open` (swipe dismiss) OU le prop onOpenChange 
 - **`swipeDirection` réactif** : passé en getter au state (sinon warning state_referenced_locally + valeur figée).
 
 ## Reste à faire / pistes
+
 - **Tests sur appareils réels iOS/Android** : gestes touch, clavier virtuel (tap-to-focus
   synchrone, scroll slack), CloseWatcher — non simulables en preview desktop.
 - Trigger registration pour le SwipeArea (retour de focus) — bits-ui n'a pas d'équivalent
   direct de `useTriggerRegistration`.
 - `snapPoints` + `swipeDirection` up : le mouvement override dans `handleSwipeProgress`
   n'est appliqué que pour "down" (comme upstream).
-- Éventuel package : extraire `src/lib/drawer` en librairie publiable.
+- ~~Éventuel package~~ FAIT (voir section "Package npm"). Avant `npm publish` :
+  ajouter le champ `repository` (pas encore de remote git) et trancher le
+  naming `Drawer.Handle` (divergence upstream, voir HANDOFF §6).

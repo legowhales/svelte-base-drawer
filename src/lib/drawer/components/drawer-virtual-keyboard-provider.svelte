@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { DrawerContext } from "../internal/drawer-state.svelte.js";
+	import { DrawerContext } from '../internal/drawer-state.svelte.js';
 	import {
 		createVirtualKeyboard,
-		VirtualKeyboardContext,
-	} from "../internal/create-virtual-keyboard.svelte.js";
-	import type { Snippet } from "svelte";
+		VirtualKeyboardContext
+	} from '../internal/create-virtual-keyboard.svelte.js';
+	import type { Snippet } from 'svelte';
 
 	interface DrawerVirtualKeyboardProviderProps {
 		children?: Snippet;
@@ -19,7 +19,7 @@
 	// lifecycle so taps can be told apart from drags.
 	const hooks = createVirtualKeyboard({
 		open: () => drawer.isOpen,
-		rootElement: () => drawer.viewportElement,
+		rootElement: () => drawer.viewportElement
 	});
 
 	VirtualKeyboardContext.set(hooks);

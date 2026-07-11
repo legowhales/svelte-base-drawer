@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { untrack } from "svelte";
-	import { createSwipeGesture } from "../internal/create-swipe-gesture.svelte.js";
-	import { DrawerContext, DRAWER_CSS_VARS } from "../internal/drawer-state.svelte.js";
-	import { getDisplacement, getElementTransform, type SwipeDirection } from "../internal/utils.js";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { untrack } from 'svelte';
+	import { createSwipeGesture } from '../internal/create-swipe-gesture.svelte.js';
+	import { DrawerContext, DRAWER_CSS_VARS } from '../internal/drawer-state.svelte.js';
+	import { getDisplacement, getElementTransform, type SwipeDirection } from '../internal/utils.js';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	const DEFAULT_SWIPE_OPEN_RATIO = 0.5;
 	const MIN_SWIPE_START_DISTANCE = 1;
@@ -12,10 +12,10 @@
 	const FALLBACK_SWIPE_OPEN_THRESHOLD = 40;
 
 	const oppositeSwipeDirection: Record<SwipeDirection, SwipeDirection> = {
-		up: "down",
-		down: "up",
-		left: "right",
-		right: "left",
+		up: 'down',
+		down: 'up',
+		left: 'right',
+		right: 'left'
 	};
 
 	interface DrawerSwipeAreaProps extends HTMLAttributes<HTMLDivElement> {
@@ -50,9 +50,7 @@
 	const resolvedSwipeDirection: SwipeDirection = $derived(
 		swipeDirectionProp ?? oppositeSwipeDirection[drawer.swipeDirection]
 	);
-	const dismissDirection: SwipeDirection = $derived(
-		oppositeSwipeDirection[resolvedSwipeDirection]
-	);
+	const dismissDirection: SwipeDirection = $derived(oppositeSwipeDirection[resolvedSwipeDirection]);
 	// Active while the drawer is closed, or while our own gesture is in flight.
 	const enabled = $derived(!disabled && (!drawer.isOpen || swipeActive));
 
@@ -82,7 +80,7 @@
 	}
 
 	function isHorizontalDismiss() {
-		return dismissDirection === "left" || dismissDirection === "right";
+		return dismissDirection === 'left' || dismissDirection === 'right';
 	}
 
 	function resolvePopupSize(): number | null {
@@ -137,7 +135,7 @@
 				? closedOffset + Math.sqrt(clampedDisplacement - closedOffset)
 				: clampedDisplacement;
 		const remaining = closedOffset - dampedDisplacement;
-		const directionSign = dismissDirection === "left" || dismissDirection === "up" ? -1 : 1;
+		const directionSign = dismissDirection === 'left' || dismissDirection === 'up' ? -1 : 1;
 		const movement = remaining * directionSign;
 		const horizontal = isHorizontalDismiss();
 		const movementX = horizontal ? movement : 0;
@@ -147,15 +145,15 @@
 
 		popupElement.style.setProperty(DRAWER_CSS_VARS.swipeMovementX, `${movementX}px`);
 		popupElement.style.setProperty(DRAWER_CSS_VARS.swipeMovementY, `${movementY}px`);
-		popupElement.setAttribute("data-swiping", "");
+		popupElement.setAttribute('data-swiping', '');
 		if (popupTransition === null) {
 			popupTransition = popupElement.style.transition;
 		}
-		popupElement.style.transition = "none";
+		popupElement.style.transition = 'none';
 
 		const backdropElement = untrack(() => drawer.backdropElement);
 		if (backdropElement) {
-			backdropElement.setAttribute("data-swiping", "");
+			backdropElement.setAttribute('data-swiping', '');
 			backdropElement.style.setProperty(DRAWER_CSS_VARS.swipeProgress, `${backdropProgress}`);
 			const frontmostHeight = untrack(() => drawer.frontmostHeight);
 			if (openProgress > 0 && frontmostHeight > 0) {
@@ -167,7 +165,7 @@
 
 		drawer.provider?.visualStateStore.set({
 			swipeProgress: openProgress,
-			frontmostHeight: openProgress > 0 ? untrack(() => drawer.frontmostHeight) : 0,
+			frontmostHeight: openProgress > 0 ? untrack(() => drawer.frontmostHeight) : 0
 		});
 		appliedSwipeStyles = true;
 	}
@@ -177,7 +175,7 @@
 		if (popupElement && appliedSwipeStyles) {
 			popupElement.style.removeProperty(DRAWER_CSS_VARS.swipeMovementX);
 			popupElement.style.removeProperty(DRAWER_CSS_VARS.swipeMovementY);
-			popupElement.removeAttribute("data-swiping");
+			popupElement.removeAttribute('data-swiping');
 		}
 
 		if (popupElement && popupTransition !== null) {
@@ -187,8 +185,8 @@
 
 		const backdropElement = untrack(() => drawer.backdropElement);
 		if (backdropElement) {
-			backdropElement.removeAttribute("data-swiping");
-			backdropElement.style.setProperty(DRAWER_CSS_VARS.swipeProgress, "0");
+			backdropElement.removeAttribute('data-swiping');
+			backdropElement.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
 			backdropElement.style.removeProperty(DRAWER_CSS_VARS.height);
 		}
 
@@ -228,7 +226,7 @@
 		trackDrag: false,
 		movementCssVars: {
 			x: DRAWER_CSS_VARS.swipeMovementX,
-			y: DRAWER_CSS_VARS.swipeMovementY,
+			y: DRAWER_CSS_VARS.swipeMovementY
 		},
 		onSwipeStart(event) {
 			disableDismissForSwipe();
@@ -244,11 +242,7 @@
 
 			if (details.direction !== resolvedSwipeDirection) return;
 
-			const displacement = getDisplacement(
-				resolvedSwipeDirection,
-				details.deltaX,
-				details.deltaY
-			);
+			const displacement = getDisplacement(resolvedSwipeDirection, details.deltaX, details.deltaY);
 			if (displacement < MIN_SWIPE_START_DISTANCE && !openedBySwipe) return;
 
 			if (!openedBySwipe) {
@@ -283,7 +277,7 @@
 			// Never dismiss through the engine — open/close is decided above.
 			return false;
 		},
-		onCancel: finishSwipeInteraction,
+		onCancel: finishSwipeInteraction
 	});
 
 	// Clean up when the area becomes disabled mid-gesture.
@@ -317,17 +311,17 @@
 	role="presentation"
 	aria-hidden="true"
 	data-drawer-swipe-area=""
-	data-open={drawer.isOpen ? "" : undefined}
-	data-closed={!drawer.isOpen ? "" : undefined}
-	data-swiping={swipe.swiping ? "" : undefined}
+	data-open={drawer.isOpen ? '' : undefined}
+	data-closed={!drawer.isOpen ? '' : undefined}
+	data-swiping={swipe.swiping ? '' : undefined}
 	data-swipe-direction={resolvedSwipeDirection}
-	data-disabled={disabled ? "" : undefined}
-	style:pointer-events={!enabled ? "none" : undefined}
-	style:touch-action={resolvedSwipeDirection === "left" || resolvedSwipeDirection === "right"
-		? "pan-y"
-		: "pan-x"}
+	data-disabled={disabled ? '' : undefined}
+	style:pointer-events={!enabled ? 'none' : undefined}
+	style:touch-action={resolvedSwipeDirection === 'left' || resolvedSwipeDirection === 'right'
+		? 'pan-y'
+		: 'pan-x'}
 	onpointerdown={(event) => {
-		if (event.pointerType === "touch") return;
+		if (event.pointerType === 'touch') return;
 		swipe.pointerHandlers.onpointerdown(event);
 		// Prevent native text selection/drag gestures from competing with
 		// swipe-open dragging.
@@ -336,15 +330,15 @@
 		}
 	}}
 	onpointermove={(event) => {
-		if (event.pointerType === "touch") return;
+		if (event.pointerType === 'touch') return;
 		swipe.pointerHandlers.onpointermove(event);
 	}}
 	onpointerup={(event) => {
-		if (event.pointerType === "touch") return;
+		if (event.pointerType === 'touch') return;
 		swipe.pointerHandlers.onpointerup(event);
 	}}
 	onpointercancel={(event) => {
-		if (event.pointerType === "touch") return;
+		if (event.pointerType === 'touch') return;
 		swipe.pointerHandlers.onpointercancel(event);
 	}}
 	ontouchstart={swipe.touch.start}

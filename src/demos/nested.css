@@ -5,6 +5,7 @@
 	position: fixed;
 	min-height: 100dvh;
 	inset: 0;
+	z-index: 50;
 	background-color: black;
 	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress)));
 	transition-duration: 450ms;
@@ -35,6 +36,7 @@
 .nested-viewport {
 	position: fixed;
 	inset: 0;
+	z-index: 50;
 	display: flex;
 	align-items: flex-end;
 	justify-content: center;
@@ -45,11 +47,17 @@
 	--peek: 1rem;
 	--stack-progress: clamp(0, var(--drawer-swipe-progress), 1);
 	--stack-step: 0.05;
-	--stack-peek-offset: max(0px, calc((var(--nested-drawers) - var(--stack-progress)) * var(--peek)));
+	--stack-peek-offset: max(
+		0px,
+		calc((var(--nested-drawers) - var(--stack-progress)) * var(--peek))
+	);
 	--stack-scale-base: max(0, calc(1 - (var(--nested-drawers) * var(--stack-step))));
 	--stack-scale: calc(var(--stack-scale-base) + (var(--stack-step) * var(--stack-progress)));
 	--stack-shrink: calc(1 - var(--stack-scale));
-	--stack-height: max(0px, calc(var(--drawer-frontmost-height, var(--drawer-height)) - var(--bleed)));
+	--stack-height: max(
+		0px,
+		calc(var(--drawer-frontmost-height, var(--drawer-height)) - var(--bleed))
+	);
 	--translate-y: calc(
 		var(--drawer-swipe-movement-y) - var(--stack-peek-offset) -
 			(var(--stack-shrink) * var(--stack-height))

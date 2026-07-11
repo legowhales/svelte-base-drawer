@@ -17,7 +17,7 @@
  * - Inline transition/transform are snapshotted before the drag and restored on
  *   release so the CSS transition takes over (snap back or dismiss).
  */
-import { untrack } from "svelte";
+import { untrack } from 'svelte';
 import {
 	clamp,
 	getDisplacement,
@@ -32,8 +32,8 @@ import {
 	isHTMLElement,
 	safelyChangePointerCapture,
 	type ScrollAxis,
-	type SwipeDirection,
-} from "./utils.js";
+	type SwipeDirection
+} from './utils.js';
 
 const DEFAULT_SWIPE_THRESHOLD = 40;
 const REVERSE_CANCEL_THRESHOLD = 10;
@@ -71,8 +71,7 @@ export interface SwipeGestureOptions {
 	movementCssVars: { x: string; y: string };
 	/** Minimum displacement (px) before a release dismisses (default threshold path) */
 	swipeThreshold?:
-		| number
-		| ((details: { element: HTMLElement; direction: SwipeDirection }) => number);
+		number | ((details: { element: HTMLElement; direction: SwipeDirection }) => number);
 	/**
 	 * If provided, swiping only begins once this returns true.
 	 * Evaluated on start and on subsequent moves while the pointer is down.
@@ -93,10 +92,7 @@ export interface SwipeGestureOptions {
 	onSwipingChange?: (swiping: boolean) => void;
 	/** Return true/false to override the default dismissal decision. */
 	onRelease?: (details: SwipeReleaseInfo) => boolean | void;
-	onDismiss?: (
-		event: PointerEvent | TouchEvent,
-		details: { direction: SwipeDirection }
-	) => void;
+	onDismiss?: (event: PointerEvent | TouchEvent, details: { direction: SwipeDirection }) => void;
 }
 
 interface DragSample {
@@ -111,12 +107,12 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		swipeThreshold: swipeThresholdProp,
 		ignoreSelectorWhenTouch = true,
 		ignoreScrollableAncestors = false,
-		trackDrag = true,
+		trackDrag = true
 	} = options;
 
 	const swipeThresholdDefault = Math.max(
 		0,
-		typeof swipeThresholdProp === "number" ? swipeThresholdProp : DEFAULT_SWIPE_THRESHOLD
+		typeof swipeThresholdProp === 'number' ? swipeThresholdProp : DEFAULT_SWIPE_THRESHOLD
 	);
 
 	// --- Reactive state ---
@@ -135,7 +131,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	let cancelledSwipe = false;
 	// Client-coordinate baseline, re-anchored whenever the movement reverses.
 	let swipeCancelBaseline = { x: 0, y: 0 };
-	let lockedDirection: "horizontal" | "vertical" | null = null;
+	let lockedDirection: 'horizontal' | 'vertical' | null = null;
 	let isFirstPointerMove = false;
 	let pendingSwipe = false;
 	let pendingSwipeStartPos: { x: number; y: number } | null = null;
@@ -162,15 +158,15 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	// Direction booleans, resolved per call since `directions` is reactive.
 	function getDirectionState() {
 		const directions = untrack(options.directions);
-		const allowLeft = directions.includes("left");
-		const allowRight = directions.includes("right");
-		const allowUp = directions.includes("up");
-		const allowDown = directions.includes("down");
+		const allowLeft = directions.includes('left');
+		const allowRight = directions.includes('right');
+		const allowUp = directions.includes('up');
+		const allowDown = directions.includes('down');
 		const hasHorizontal = allowLeft || allowRight;
 		const hasVertical = allowUp || allowDown;
 		const scrollAxes: ScrollAxis[] = [];
-		if (hasVertical) scrollAxes.push("vertical");
-		if (hasHorizontal) scrollAxes.push("horizontal");
+		if (hasVertical) scrollAxes.push('vertical');
+		if (hasHorizontal) scrollAxes.push('horizontal');
 		return {
 			directions,
 			allowLeft,
@@ -180,7 +176,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			hasHorizontal,
 			hasVertical,
 			scrollAxes,
-			primaryDirection: directions.length === 1 ? directions[0] : undefined,
+			primaryDirection: directions.length === 1 ? directions[0] : undefined
 		};
 	}
 
@@ -194,7 +190,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	function resolveSwipeThreshold(direction: SwipeDirection | undefined) {
 		if (!direction) return;
 
-		if (typeof swipeThresholdProp !== "function") {
+		if (typeof swipeThresholdProp !== 'function') {
 			swipeThreshold = swipeThresholdDefault;
 			return;
 		}
@@ -251,7 +247,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			if (!dragStyleSnapshot) {
 				dragStyleSnapshot = [style.transition, style.transform];
 			}
-			style.transition = "none";
+			style.transition = 'none';
 		} else if (dragStyleSnapshot) {
 			[style.transition, style.transform] = dragStyleSnapshot;
 			dragStyleSnapshot = null;
@@ -276,7 +272,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			const durationMs = Math.max(timeStamp - last.time, MIN_RELEASE_VELOCITY_DURATION_MS);
 			lastDragVelocity = {
 				x: (offset.x - last.x) / durationMs,
-				y: (offset.y - last.y) / durationMs,
+				y: (offset.y - last.y) / durationMs
 			};
 		}
 
@@ -315,28 +311,29 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	// --- Event plumbing ---
 
 	function isTouchLikeEvent(event: PointerEvent | TouchEvent): boolean {
-		if ("touches" in event) return true;
-		return event.pointerType === "touch";
+		if ('touches' in event) return true;
+		return event.pointerType === 'touch';
 	}
 
 	function getPrimaryPointerPosition(
 		event: PointerEvent | TouchEvent
 	): { x: number; y: number } | null {
-		if ("touches" in event) {
+		if ('touches' in event) {
 			const touch = event.touches[0];
 			return touch ? { x: touch.clientX, y: touch.clientY } : null;
 		}
 		return { x: event.clientX, y: event.clientY };
 	}
 
-	function getTargetAtPoint(
-		position: { x: number; y: number },
-		event: Event
-	): HTMLElement | null {
+	function getTargetAtPoint(position: { x: number; y: number }, event: Event): Element | null {
 		const doc = getElement()?.ownerDocument ?? document;
 		const elementAtPoint = getElementAtPoint(doc, position.x, position.y);
 		const target = elementAtPoint ?? getEventTarget(event);
-		return isHTMLElement(target) ? target : null;
+		// No HTMLElement narrowing here (upstream only type-casts): an SVG icon
+		// inside a <button> must still match the interactive-elements ignore
+		// selector, otherwise a pointer swipe starts from it and its pointer
+		// capture swallows the button's click.
+		return target instanceof Element ? target : null;
 	}
 
 	function findGestureScrollableTouchTarget(
@@ -346,14 +343,14 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		const { hasHorizontal, hasVertical } = getDirectionState();
 
 		if (hasHorizontal && !hasVertical) {
-			return findScrollableTouchTarget(target, root, "horizontal");
+			return findScrollableTouchTarget(target, root, 'horizontal');
 		}
 		if (hasVertical && !hasHorizontal) {
-			return findScrollableTouchTarget(target, root, "vertical");
+			return findScrollableTouchTarget(target, root, 'vertical');
 		}
 		return (
-			findScrollableTouchTarget(target, root, "vertical") ??
-			findScrollableTouchTarget(target, root, "horizontal")
+			findScrollableTouchTarget(target, root, 'vertical') ??
+			findScrollableTouchTarget(target, root, 'horizontal')
 		);
 	}
 
@@ -414,8 +411,8 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			dragOffset = { x: transform.x, y: transform.y };
 			recordDragSample({ x: transform.x, y: transform.y }, swipeStartTime);
 
-			if (!("touches" in event)) {
-				safelyChangePointerCapture(element, event.pointerId, "setPointerCapture");
+			if (!('touches' in event)) {
+				safelyChangePointerCapture(element, event.pointerId, 'setPointerCapture');
 			}
 		}
 
@@ -456,7 +453,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 
 		const element = getElement();
 		if (element) {
-			safelyChangePointerCapture(element, event.pointerId, "releasePointerCapture");
+			safelyChangePointerCapture(element, event.pointerId, 'releasePointerCapture');
 		}
 
 		updateSwipeProgress(0, { deltaX: 0, deltaY: 0, direction: undefined });
@@ -518,7 +515,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	function handleStart(event: PointerEvent | TouchEvent) {
 		if (!isEnabled()) return;
 		if (event.defaultPrevented) return;
-		if (!("touches" in event) && event.button !== 0) return;
+		if (!('touches' in event) && event.button !== 0) return;
 
 		const startPos = getPrimaryPointerPosition(event);
 		if (!startPos) return;
@@ -560,7 +557,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			}
 		}
 
-		if (!("touches" in event)) {
+		if (!('touches' in event)) {
 			// Prevent text selection on Safari during the drag.
 			event.preventDefault();
 		}
@@ -606,30 +603,30 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		if (lockedDirection === null && hasHorizontal && hasVertical) {
 			const movementDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 			if (movementDistance >= MIN_DRAG_THRESHOLD) {
-				lockedDirection = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+				lockedDirection = Math.abs(deltaX) > Math.abs(deltaY) ? 'horizontal' : 'vertical';
 			}
 		}
 
 		let candidate: SwipeDirection | undefined;
 		if (!intendedSwipeDirection) {
-			if (lockedDirection === "vertical") {
-				if (deltaY > 0) candidate = "down";
-				else if (deltaY < 0) candidate = "up";
-			} else if (lockedDirection === "horizontal") {
-				if (deltaX > 0) candidate = "right";
-				else if (deltaX < 0) candidate = "left";
+			if (lockedDirection === 'vertical') {
+				if (deltaY > 0) candidate = 'down';
+				else if (deltaY < 0) candidate = 'up';
+			} else if (lockedDirection === 'horizontal') {
+				if (deltaX > 0) candidate = 'right';
+				else if (deltaX < 0) candidate = 'left';
 			} else if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-				candidate = deltaX > 0 ? "right" : "left";
+				candidate = deltaX > 0 ? 'right' : 'left';
 			} else {
-				candidate = deltaY > 0 ? "down" : "up";
+				candidate = deltaY > 0 ? 'down' : 'up';
 			}
 
 			if (candidate) {
 				const isAllowed =
-					(candidate === "left" && allowLeft) ||
-					(candidate === "right" && allowRight) ||
-					(candidate === "up" && allowUp) ||
-					(candidate === "down" && allowDown);
+					(candidate === 'left' && allowLeft) ||
+					(candidate === 'right' && allowRight) ||
+					(candidate === 'up' && allowUp) ||
+					(candidate === 'down' && allowDown);
 				if (isAllowed) {
 					intendedSwipeDirection = candidate;
 					maxSwipeDisplacement = getDisplacement(candidate, deltaX, deltaY);
@@ -657,11 +654,11 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		let newOffsetX = initialTransform.x;
 		let newOffsetY = initialTransform.y;
 
-		if (lockedDirection === "horizontal") {
+		if (lockedDirection === 'horizontal') {
 			if (hasHorizontal) {
 				newOffsetX += dampedDelta.x;
 			}
-		} else if (lockedDirection === "vertical") {
+		} else if (lockedDirection === 'vertical') {
 			if (hasVertical) {
 				newOffsetY += dampedDelta.y;
 			}
@@ -683,7 +680,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		const details: SwipeProgressDetails = {
 			deltaX: dragDeltaX,
 			deltaY: dragDeltaY,
-			direction: intendedSwipeDirection,
+			direction: intendedSwipeDirection
 		};
 
 		const progressDirection = dirState.primaryDirection ?? intendedSwipeDirection;
@@ -693,7 +690,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		}
 
 		const size =
-			progressDirection === "left" || progressDirection === "right"
+			progressDirection === 'left' || progressDirection === 'right'
 				? elementSize.width
 				: elementSize.height;
 		const scale = initialTransform.scale || 1;
@@ -717,7 +714,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 
 		let endAfterMove = false;
 
-		if (!("touches" in event)) {
+		if (!('touches' in event)) {
 			const hasPrimaryButton = hasPrimaryMouseButton(event.buttons);
 			if (hasPrimaryButton) {
 				sawPrimaryButtonsOnMove = true;
@@ -792,7 +789,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 
 				const started = startSwipeAtPosition(event, currentPos, {
 					ignoreScrollableTarget: ignoreScrollableOnStart,
-					ignoreScrollableAncestors: ignoreScrollableOnStart,
+					ignoreScrollableAncestors: ignoreScrollableOnStart
 				});
 				if (started) {
 					if (pendingStartPos && ignoreScrollableOnStart) {
@@ -820,7 +817,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		lastMovePos = currentPos;
 		handleMoveCore(event, currentPos, movement, boundaryOverride);
 
-		if (endAfterMove && !("touches" in event)) {
+		if (endAfterMove && !('touches' in event)) {
 			handleEnd(event);
 		}
 	}
@@ -836,7 +833,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		const progressDetails: SwipeProgressDetails = {
 			deltaX: releaseDeltaX,
 			deltaY: releaseDeltaY,
-			direction: intendedSwipeDirection,
+			direction: intendedSwipeDirection
 		};
 
 		if (!isSwipingInternal) {
@@ -851,8 +848,8 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		sawPrimaryButtonsOnMove = false;
 
 		const element = getElement();
-		if (element && !("touches" in event)) {
-			safelyChangePointerCapture(element, event.pointerId, "releasePointerCapture");
+		if (element && !('touches' in event)) {
+			safelyChangePointerCapture(element, event.pointerId, 'releasePointerCapture');
 		}
 
 		const deltaX = releaseDeltaX;
@@ -894,9 +891,9 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			velocityX,
 			velocityY,
 			releaseVelocityX,
-			releaseVelocityY,
+			releaseVelocityY
 		});
-		const hasReleaseDecision = typeof releaseDecision === "boolean";
+		const hasReleaseDecision = typeof releaseDecision === 'boolean';
 
 		if (cancelledSwipe && !hasReleaseDecision) {
 			dragOffset = { x: initialTransform.x, y: initialTransform.y };
@@ -915,28 +912,28 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		} else {
 			for (const direction of getDirectionState().directions) {
 				switch (direction) {
-					case "right":
+					case 'right':
 						if (deltaX > swipeThreshold) {
 							shouldClose = true;
-							dismissDirection = "right";
+							dismissDirection = 'right';
 						}
 						break;
-					case "left":
+					case 'left':
 						if (deltaX < -swipeThreshold) {
 							shouldClose = true;
-							dismissDirection = "left";
+							dismissDirection = 'left';
 						}
 						break;
-					case "down":
+					case 'down':
 						if (deltaY > swipeThreshold) {
 							shouldClose = true;
-							dismissDirection = "down";
+							dismissDirection = 'down';
 						}
 						break;
-					case "up":
+					case 'up':
 						if (deltaY < -swipeThreshold) {
 							shouldClose = true;
-							dismissDirection = "up";
+							dismissDirection = 'up';
 						}
 						break;
 				}
@@ -983,15 +980,15 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			onpointerdown: handleStart as (event: PointerEvent) => void,
 			onpointermove: handleMove as (event: PointerEvent) => void,
 			onpointerup: handleEnd as (event: PointerEvent) => void,
-			onpointercancel: handleEnd as (event: PointerEvent) => void,
+			onpointercancel: handleEnd as (event: PointerEvent) => void
 		},
 		// Touch handlers — called selectively by the drawer's touch scroll manager.
 		touch: {
 			start: handleStart as (event: TouchEvent) => void,
 			move: handleMove as (event: TouchEvent) => void,
 			end: handleEnd as (event: TouchEvent) => void,
-			cancel: handleEnd as (event: TouchEvent) => void,
-		},
+			cancel: handleEnd as (event: TouchEvent) => void
+		}
 	};
 }
 

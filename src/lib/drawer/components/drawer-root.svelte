@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { Dialog } from "bits-ui";
-	import { untrack } from "svelte";
-	import { DrawerContext, DrawerRootState } from "../internal/drawer-state.svelte.js";
-	import { DrawerProviderContext } from "../internal/drawer-provider.svelte.js";
-	import type { DrawerSnapPoint } from "../internal/snap-points.js";
-	import type { SwipeDirection } from "../internal/utils.js";
-	import type { Snippet } from "svelte";
+	import { Dialog } from 'bits-ui';
+	import { untrack } from 'svelte';
+	import { DrawerContext, DrawerRootState } from '../internal/drawer-state.svelte.js';
+	import { DrawerProviderContext } from '../internal/drawer-provider.svelte.js';
+	import type { DrawerSnapPoint } from '../internal/snap-points.js';
+	import type { SwipeDirection } from '../internal/utils.js';
+	import type { Snippet } from 'svelte';
 
 	interface DrawerRootProps {
 		open?: boolean;
@@ -31,13 +31,13 @@
 		open = $bindable(false),
 		onOpenChange,
 		onOpenChangeComplete,
-		swipeDirection = "down",
+		swipeDirection = 'down',
 		snapPoints,
 		snapPoint = $bindable(undefined),
 		defaultSnapPoint,
 		onSnapPointChange,
 		snapToSequentialPoints = false,
-		children,
+		children
 	}: DrawerRootProps = $props();
 
 	const drawerId = $props.id();
@@ -68,7 +68,7 @@
 				if (open === v) return;
 				open = v;
 				onOpenChange?.(v);
-			},
+			}
 		},
 		swipeDirection: () => swipeDirection,
 		snapPoints: () => snapPoints,
@@ -81,11 +81,11 @@
 				if (snapPoint === v) return;
 				snapPoint = v;
 				onSnapPointChange?.(v);
-			},
+			}
 		},
 		defaultSnapPoint: () => resolvedDefaultSnapPoint,
 		parent: parentState,
-		provider: providerState,
+		provider: providerState
 	});
 
 	// Restore the default snap point when the drawer closes (any close path),
@@ -139,7 +139,7 @@
 	// desktop; only the topmost drawer of a stack listens.
 	$effect(() => {
 		if (!open || state.nestedOpenDrawerCount > 0) return;
-		if (typeof navigator === "undefined" || !/android/i.test(navigator.userAgent)) return;
+		if (typeof navigator === 'undefined' || !/android/i.test(navigator.userAgent)) return;
 
 		const CloseWatcherCtor = (
 			window as Window & { CloseWatcher?: new () => EventTarget & { destroy(): void } }
@@ -152,9 +152,9 @@
 				state.opts.open.current = false;
 			});
 		};
-		watcher.addEventListener("close", handleClose);
+		watcher.addEventListener('close', handleClose);
 		return () => {
-			watcher.removeEventListener("close", handleClose);
+			watcher.removeEventListener('close', handleClose);
 			watcher.destroy();
 		};
 	});

@@ -6,7 +6,7 @@
  * visual-state store (swipe progress + frontmost popup height) so the indent
  * effect can track the swipe at high frequency without re-renders.
  */
-import { Context } from "runed";
+import { Context } from 'runed';
 
 export interface DrawerVisualState {
 	swipeProgress: number;
@@ -22,7 +22,7 @@ export interface DrawerVisualStateStore {
 export function createVisualStateStore(): DrawerVisualStateStore {
 	let state: DrawerVisualState = {
 		swipeProgress: 0,
-		frontmostHeight: 0,
+		frontmostHeight: 0
 	};
 	const listeners = new Set<() => void>();
 
@@ -48,7 +48,7 @@ export function createVisualStateStore(): DrawerVisualStateStore {
 
 			state = {
 				swipeProgress: nextSwipeProgress,
-				frontmostHeight: nextFrontmostHeight,
+				frontmostHeight: nextFrontmostHeight
 			};
 
 			listeners.forEach((listener) => {
@@ -60,7 +60,7 @@ export function createVisualStateStore(): DrawerVisualStateStore {
 			return () => {
 				listeners.delete(listener);
 			};
-		},
+		}
 	};
 }
 
@@ -95,4 +95,4 @@ export class DrawerProviderState {
 	}
 }
 
-export const DrawerProviderContext = new Context<DrawerProviderState>("Drawer.Provider");
+export const DrawerProviderContext = new Context<DrawerProviderState>('Drawer.Provider');

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { DrawerProviderContext } from "../internal/drawer-provider.svelte.js";
-	import { DRAWER_CSS_VARS } from "../internal/drawer-state.svelte.js";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { DrawerProviderContext } from '../internal/drawer-provider.svelte.js';
+	import { DRAWER_CSS_VARS } from '../internal/drawer-state.svelte.js';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	interface DrawerIndentProps extends HTMLAttributes<HTMLDivElement> {
 		children?: Snippet;
@@ -30,7 +30,7 @@
 			const { swipeProgress, frontmostHeight } = store.getSnapshot();
 			el.style.setProperty(
 				DRAWER_CSS_VARS.swipeProgress,
-				swipeProgress > 0 ? `${swipeProgress}` : "0"
+				swipeProgress > 0 ? `${swipeProgress}` : '0'
 			);
 			if (frontmostHeight > 0) {
 				el.style.setProperty(DRAWER_CSS_VARS.height, `${frontmostHeight}px`);
@@ -43,7 +43,7 @@
 		const unsubscribe = store.subscribe(sync);
 		return () => {
 			unsubscribe();
-			el.style.setProperty(DRAWER_CSS_VARS.swipeProgress, "0");
+			el.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
 			el.style.removeProperty(DRAWER_CSS_VARS.height);
 		};
 	});
@@ -59,8 +59,8 @@
 <div
 	bind:this={indentEl}
 	data-drawer-indent=""
-	data-active={active ? "" : undefined}
-	data-inactive={!active ? "" : undefined}
+	data-active={active ? '' : undefined}
+	data-inactive={!active ? '' : undefined}
 	{...restProps}
 >
 	{@render children?.()}

@@ -14,18 +14,18 @@
  *   keyboard inputs are committed on touchend with a synchronous focus (with an
  *   off-screen trick to suppress iOS page scrolling) and a redispatched click.
  */
-import { untrack } from "svelte";
-import { Context } from "runed";
+import { untrack } from 'svelte';
+import { Context } from 'runed';
 import {
 	clamp,
 	findScrollableTouchTarget,
 	getElementAtPoint,
 	getEventTarget,
 	getParentNode,
-	isHTMLElement,
-} from "./utils.js";
+	isHTMLElement
+} from './utils.js';
 
-export const DRAWER_KEYBOARD_INSET_VAR = "--drawer-keyboard-inset";
+export const DRAWER_KEYBOARD_INSET_VAR = '--drawer-keyboard-inset';
 
 const KEYBOARD_RESIZE_THRESHOLD = 60;
 const KEYBOARD_VISIBILITY_MARGIN = 16;
@@ -36,13 +36,13 @@ const KEYBOARD_SCROLL_SLACK = 48;
 const INPUT_TAP_MOVE_THRESHOLD = 10;
 const INPUT_TAP_HIT_SLOP = 16;
 const KEYBOARD_INPUT_TYPES = new Set([
-	"email",
-	"number",
-	"password",
-	"search",
-	"tel",
-	"text",
-	"url",
+	'email',
+	'number',
+	'password',
+	'search',
+	'tel',
+	'text',
+	'url'
 ]);
 const INTERACTIVE_TAP_SELECTOR = 'button,a,input,select,textarea,label,[role="button"]';
 
@@ -73,7 +73,7 @@ interface KeyboardTouchTarget {
 // rejected, so the caller must NOT fall back to the touchstart target
 // (`touchend.target` stays at the touchstart node on mobile) — doing so would
 // steal a tap meant for that element.
-const KEYBOARD_TAP_BLOCKED = Symbol("KeyboardTapBlocked");
+const KEYBOARD_TAP_BLOCKED = Symbol('KeyboardTapBlocked');
 
 export interface VirtualKeyboardHooks {
 	onTouchStart: (event: TouchEvent) => void;
@@ -83,7 +83,7 @@ export interface VirtualKeyboardHooks {
 }
 
 export const VirtualKeyboardContext = new Context<VirtualKeyboardHooks>(
-	"Drawer.VirtualKeyboardProvider"
+	'Drawer.VirtualKeyboardProvider'
 );
 
 export interface VirtualKeyboardOptions {
@@ -114,7 +114,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 				cancelAnimationFrame(frameId);
 				frameId = 0;
 			}
-		},
+		}
 	};
 
 	function restoreKeyboardScrollAdjustment() {
@@ -153,12 +153,12 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 				paddingBottom: element.style.paddingBottom,
 				scrollPaddingBottom: element.style.scrollPaddingBottom,
 				computedPaddingBottom: Number.parseFloat(styles.paddingBottom) || 0,
-				computedScrollPaddingBottom: Number.parseFloat(styles.scrollPaddingBottom) || 0,
+				computedScrollPaddingBottom: Number.parseFloat(styles.scrollPaddingBottom) || 0
 			};
 			keyboardScrollAdjustment = adjustment;
 		}
 
-		element.style.overflowAnchor = "none";
+		element.style.overflowAnchor = 'none';
 		element.style.paddingBottom = `${adjustment.computedPaddingBottom + roundedSlack}px`;
 		element.style.scrollPaddingBottom = `${
 			adjustment.computedScrollPaddingBottom + KEYBOARD_VISIBILITY_MARGIN
@@ -167,10 +167,9 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 
 	function animateKeyboardScroll(element: HTMLElement, scrollTop: number) {
 		const win = element.ownerDocument.defaultView ?? window;
-		const behavior: ScrollBehavior = win.matchMedia?.("(prefers-reduced-motion: reduce)")
-			?.matches
-			? "auto"
-			: "smooth";
+		const behavior: ScrollBehavior = win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+			? 'auto'
+			: 'smooth';
 
 		element.scrollTo({ top: scrollTop, behavior });
 	}
@@ -311,19 +310,19 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		const cleanups: Array<() => void> = [];
 
 		if (visualViewport) {
-			visualViewport.addEventListener("resize", handleViewportUpdate);
-			visualViewport.addEventListener("scroll", handleViewportUpdate);
+			visualViewport.addEventListener('resize', handleViewportUpdate);
+			visualViewport.addEventListener('scroll', handleViewportUpdate);
 			cleanups.push(() => {
-				visualViewport.removeEventListener("resize", handleViewportUpdate);
-				visualViewport.removeEventListener("scroll", handleViewportUpdate);
+				visualViewport.removeEventListener('resize', handleViewportUpdate);
+				visualViewport.removeEventListener('scroll', handleViewportUpdate);
 			});
 		}
 
-		doc.addEventListener("focusin", handleFocusIn, true);
-		doc.addEventListener("focusout", handleFocusOut, true);
+		doc.addEventListener('focusin', handleFocusIn, true);
+		doc.addEventListener('focusout', handleFocusOut, true);
 		cleanups.push(() => {
-			doc.removeEventListener("focusin", handleFocusIn, true);
-			doc.removeEventListener("focusout", handleFocusOut, true);
+			doc.removeEventListener('focusin', handleFocusIn, true);
+			doc.removeEventListener('focusout', handleFocusOut, true);
 		});
 
 		if (captureFocusedKeyboardTarget(doc.activeElement)) {
@@ -407,8 +406,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		}
 
 		if (keyboardTarget) {
-			const { clickTarget: keyboardClickTarget, focusTarget: keyboardFocusTarget } =
-				keyboardTarget;
+			const { clickTarget: keyboardClickTarget, focusTarget: keyboardFocusTarget } = keyboardTarget;
 			const win = keyboardFocusTarget.ownerDocument.defaultView ?? window;
 
 			// While pinch-zoomed, keyboard alignment is suspended; let native behavior
@@ -447,7 +445,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		onTouchStart,
 		onTouchMove,
 		onTouchEnd,
-		onTouchCancel: resetTouchTrackingState,
+		onTouchCancel: resetTouchTrackingState
 	};
 }
 
@@ -465,7 +463,7 @@ function isKeyboardInputElement(element: HTMLElement): boolean {
 		// Disabled controls can't focus or open the keyboard, so tap-to-focus must
 		// skip them — otherwise the dispatched click fires handlers a native tap on
 		// a disabled control never would.
-		return !element.matches(":disabled");
+		return !element.matches(':disabled');
 	}
 
 	return false;
@@ -478,7 +476,7 @@ function resolveKeyboardInputTarget(target: EventTarget | null): HTMLElement | n
 		return target.isContentEditable ? getContentEditableHost(target) : target;
 	}
 
-	const label = target.closest("label");
+	const label = target.closest('label');
 	const control = label?.control ?? null;
 
 	return isHTMLElement(control) && isKeyboardInputElement(control) ? control : null;
@@ -490,7 +488,7 @@ function resolveKeyboardTouchTarget(target: EventTarget | null): KeyboardTouchTa
 
 	return {
 		focusTarget,
-		clickTarget: isHTMLElement(target) ? target : focusTarget,
+		clickTarget: isHTMLElement(target) ? target : focusTarget
 	};
 }
 
@@ -515,7 +513,7 @@ function resolveKeyboardTouchTargetFromPoint(
 	if (exactKeyboardTarget) {
 		return {
 			focusTarget: exactKeyboardTarget,
-			clickTarget: isHTMLElement(exactTarget) ? exactTarget : exactKeyboardTarget,
+			clickTarget: isHTMLElement(exactTarget) ? exactTarget : exactKeyboardTarget
 		};
 	}
 
@@ -532,7 +530,7 @@ function resolveKeyboardTouchTargetFromPoint(
 		[0, INPUT_TAP_HIT_SLOP],
 		[0, -INPUT_TAP_HIT_SLOP],
 		[INPUT_TAP_HIT_SLOP, 0],
-		[-INPUT_TAP_HIT_SLOP, 0],
+		[-INPUT_TAP_HIT_SLOP, 0]
 	]) {
 		const keyboardTarget = resolveKeyboardInputTarget(
 			getElementAtPoint(doc, clientX + offsetX, clientY + offsetY)
@@ -541,7 +539,7 @@ function resolveKeyboardTouchTargetFromPoint(
 		if (keyboardTarget) {
 			return {
 				focusTarget: keyboardTarget,
-				clickTarget: keyboardTarget,
+				clickTarget: keyboardTarget
 			};
 		}
 	}
@@ -549,18 +547,18 @@ function resolveKeyboardTouchTargetFromPoint(
 	return null;
 }
 
-function dispatchKeyboardClick(target: HTMLElement, touch: Pick<Touch, "clientX" | "clientY">) {
+function dispatchKeyboardClick(target: HTMLElement, touch: Pick<Touch, 'clientX' | 'clientY'>) {
 	const win = target.ownerDocument.defaultView ?? window;
 	const ClickEvent = win.PointerEvent ?? win.MouseEvent;
 
 	target.dispatchEvent(
-		new ClickEvent("click", {
+		new ClickEvent('click', {
 			bubbles: true,
 			cancelable: true,
 			clientX: touch.clientX,
 			clientY: touch.clientY,
 			detail: 1,
-			view: win,
+			view: win
 		})
 	);
 }
@@ -573,9 +571,9 @@ function focusKeyboardInputWithoutPageScroll(target: HTMLElement) {
 
 	// iOS Safari can still scroll the page for transformed sheets even with
 	// preventScroll. Move the input off-screen only for the synchronous focus.
-	target.style.transition = "none";
-	target.style.opacity = "0";
-	target.style.transform = "translateY(-2000px)";
+	target.style.transition = 'none';
+	target.style.opacity = '0';
+	target.style.transform = 'translateY(-2000px)';
 	try {
 		if (wasFocused) {
 			target.blur();
@@ -595,8 +593,8 @@ function findKeyboardScrollTarget(target: HTMLElement, root: HTMLElement): HTMLE
 	// to one that only becomes scrollable once keyboard slack is added.
 	const scrollStart = getParentNode(target);
 	return (
-		findScrollableTouchTarget(scrollStart, root, "vertical") ??
-		findScrollableTouchTarget(scrollStart, root, "vertical", true)
+		findScrollableTouchTarget(scrollStart, root, 'vertical') ??
+		findScrollableTouchTarget(scrollStart, root, 'vertical', true)
 	);
 }
 
@@ -616,7 +614,7 @@ function getKeyboardVisualViewport(win: Window): KeyboardVisualViewport | null {
 	const top = Math.max(0, visualViewport.offsetTop);
 	return {
 		top,
-		bottom: Math.min(win.innerHeight, top + visualViewport.height),
+		bottom: Math.min(win.innerHeight, top + visualViewport.height)
 	};
 }
 

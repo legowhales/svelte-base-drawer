@@ -8,9 +8,9 @@
  * and drives the engine natively via `swipeGesture.moveNative` (#4980). Element
  * handlers only cover touchstart/end/cancel.
  */
-import { untrack } from "svelte";
-import type { SwipeGesture } from "./create-swipe-gesture.svelte.js";
-import type { VirtualKeyboardHooks } from "./create-virtual-keyboard.svelte.js";
+import { untrack } from 'svelte';
+import type { SwipeGesture } from './create-swipe-gesture.svelte.js';
+import type { VirtualKeyboardHooks } from './create-virtual-keyboard.svelte.js';
 import {
 	type SwipeDirection,
 	type ScrollAxis,
@@ -24,8 +24,8 @@ import {
 	getElementAtPoint,
 	getEventTarget,
 	getScrollAxis,
-	getCrossScrollAxis,
-} from "./utils.js";
+	getCrossScrollAxis
+} from './utils.js';
 
 interface TouchScrollState {
 	startX: number;
@@ -55,7 +55,7 @@ export interface DrawerTouchScrollOptions {
 export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 	let ignoreTouchSwipe = false;
 	let touchState: TouchScrollState | null = null;
-	let lastPointerType = "";
+	let lastPointerType = '';
 	let ignoreNextTouchStartFromPen = false;
 
 	function getRoot(): HTMLElement | null {
@@ -77,7 +77,7 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 	function resetTrackingState() {
 		ignoreTouchSwipe = false;
 		touchState = null;
-		lastPointerType = "";
+		lastPointerType = '';
 		ignoreNextTouchStartFromPen = false;
 	}
 
@@ -100,11 +100,9 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 
 		const direction = getDirection();
 		const scrollAxis = getScrollAxis(direction);
-		const isVertical = scrollAxis === "vertical";
+		const isVertical = scrollAxis === 'vertical';
 
-		const drawerAxisDelta = isVertical
-			? touch.clientY - ts.lastY
-			: touch.clientX - ts.lastX;
+		const drawerAxisDelta = isVertical ? touch.clientY - ts.lastY : touch.clientX - ts.lastX;
 
 		// Preserve native range interaction by never locking touchmove for range inputs.
 		if (isEventOnRangeInput(event)) {
@@ -196,17 +194,17 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 	/** Track the pointer type so pen-initiated touch sequences can be skipped. */
 	function notePointerDown(event: PointerEvent) {
 		lastPointerType = event.pointerType;
-		ignoreNextTouchStartFromPen = event.pointerType === "pen";
+		ignoreNextTouchStartFromPen = event.pointerType === 'pen';
 	}
 
 	function notePointerSettled(event: PointerEvent) {
 		if (lastPointerType === event.pointerType) {
-			lastPointerType = "";
+			lastPointerType = '';
 		}
 	}
 
 	function handleTouchStart(event: TouchEvent) {
-		const startedFromPen = lastPointerType === "pen" && ignoreNextTouchStartFromPen;
+		const startedFromPen = lastPointerType === 'pen' && ignoreNextTouchStartFromPen;
 		if (startedFromPen) {
 			ignoreNextTouchStartFromPen = false;
 			ignoreTouchSwipe = false;
@@ -258,8 +256,7 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 		let hasCrossAxisScrollableContent = false;
 		if (target) {
 			scrollTarget = findScrollableTouchTarget(target, root, scrollAxis);
-			hasCrossAxisScrollableContent =
-				findScrollableTouchTarget(target, root, crossAxis) !== null;
+			hasCrossAxisScrollableContent = findScrollableTouchTarget(target, root, crossAxis) !== null;
 		}
 
 		let allowSwipe: boolean | null = null;
@@ -276,7 +273,7 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 			scrollTarget,
 			hasCrossAxisScrollableContent,
 			allowSwipe,
-			preserveNativeCrossAxisScroll: false,
+			preserveNativeCrossAxisScroll: false
 		};
 
 		options.swipeGesture.touch.start(event);
@@ -300,13 +297,13 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 	 */
 	function setupNativeTouchMoveListener(root: HTMLElement) {
 		const doc = root.ownerDocument;
-		doc.addEventListener("touchmove", handleNativeTouchMove, {
+		doc.addEventListener('touchmove', handleNativeTouchMove, {
 			passive: false,
-			capture: true,
+			capture: true
 		});
 		return () => {
-			doc.removeEventListener("touchmove", handleNativeTouchMove, {
-				capture: true,
+			doc.removeEventListener('touchmove', handleNativeTouchMove, {
+				capture: true
 			} as EventListenerOptions);
 		};
 	}
@@ -317,10 +314,10 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 		handlers: {
 			ontouchstart: handleTouchStart,
 			ontouchend: handleTouchEnd,
-			ontouchcancel: handleTouchCancel,
+			ontouchcancel: handleTouchCancel
 		},
 		setupNativeTouchMoveListener,
-		reset: resetTrackingState,
+		reset: resetTrackingState
 	};
 }
 

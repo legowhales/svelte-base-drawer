@@ -4,47 +4,47 @@
  * snap points, nested drawers, the optional provider (indent effect) and
  * virtual keyboard provider, and bits-ui Dialog.
  */
-import { Context } from "runed";
-import { untrack } from "svelte";
+import { Context } from 'runed';
+import { untrack } from 'svelte';
 import {
 	createSwipeGesture,
 	type SwipeGesture,
 	type SwipeProgressDetails,
-	type SwipeReleaseInfo,
-} from "./create-swipe-gesture.svelte.js";
-import { createDrawerTouchScroll } from "./create-drawer-touch-scroll.svelte.js";
+	type SwipeReleaseInfo
+} from './create-swipe-gesture.svelte.js';
+import { createDrawerTouchScroll } from './create-drawer-touch-scroll.svelte.js';
 import {
 	DRAWER_KEYBOARD_INSET_VAR,
-	type VirtualKeyboardHooks,
-} from "./create-virtual-keyboard.svelte.js";
-import type { DrawerProviderState } from "./drawer-provider.svelte.js";
+	type VirtualKeyboardHooks
+} from './create-virtual-keyboard.svelte.js';
+import type { DrawerProviderState } from './drawer-provider.svelte.js';
 import {
 	getSnapPointSwipeMovement,
 	resolveActiveSnapPoint,
 	resolveSnapPoints,
 	type DrawerSnapPoint,
-	type ResolvedDrawerSnapPoint,
-} from "./snap-points.js";
+	type ResolvedDrawerSnapPoint
+} from './snap-points.js';
 import {
 	clamp,
 	getElementAtPoint,
 	isDrawerContentTarget,
 	isSwipeIgnoredTarget,
 	shouldIgnoreSwipeForTextSelection,
-	type SwipeDirection,
-} from "./utils.js";
+	type SwipeDirection
+} from './utils.js';
 
 // CSS custom property names (aligned with base-ui v1.6.0)
 export const DRAWER_CSS_VARS = {
-	swipeMovementX: "--drawer-swipe-movement-x",
-	swipeMovementY: "--drawer-swipe-movement-y",
-	swipeProgress: "--drawer-swipe-progress",
-	swipeStrength: "--drawer-swipe-strength",
-	snapPointOffset: "--drawer-snap-point-offset",
-	height: "--drawer-height",
-	frontmostHeight: "--drawer-frontmost-height",
-	nestedDrawers: "--nested-drawers",
-	keyboardInset: DRAWER_KEYBOARD_INSET_VAR,
+	swipeMovementX: '--drawer-swipe-movement-x',
+	swipeMovementY: '--drawer-swipe-movement-y',
+	swipeProgress: '--drawer-swipe-progress',
+	swipeStrength: '--drawer-swipe-strength',
+	snapPointOffset: '--drawer-snap-point-offset',
+	height: '--drawer-height',
+	frontmostHeight: '--drawer-frontmost-height',
+	nestedDrawers: '--nested-drawers',
+	keyboardInset: DRAWER_KEYBOARD_INSET_VAR
 } as const;
 
 // Swipe physics constants (calibrated from base-ui)
@@ -67,7 +67,7 @@ let cssPropsRegistered = false;
 
 export function registerDrawerCSSProperties() {
 	if (cssPropsRegistered) return;
-	if (typeof CSS === "undefined" || !("registerProperty" in CSS)) return;
+	if (typeof CSS === 'undefined' || !('registerProperty' in CSS)) return;
 	cssPropsRegistered = true;
 
 	const reg = (name: string, syntax: string, initialValue: string) => {
@@ -77,16 +77,16 @@ export function registerDrawerCSSProperties() {
 			/* already registered */
 		}
 	};
-	reg(DRAWER_CSS_VARS.swipeMovementX, "<length>", "0px");
-	reg(DRAWER_CSS_VARS.swipeMovementY, "<length>", "0px");
-	reg(DRAWER_CSS_VARS.snapPointOffset, "<length>", "0px");
-	reg(DRAWER_CSS_VARS.swipeProgress, "<number>", "0");
-	reg(DRAWER_CSS_VARS.swipeStrength, "<number>", "1");
+	reg(DRAWER_CSS_VARS.swipeMovementX, '<length>', '0px');
+	reg(DRAWER_CSS_VARS.swipeMovementY, '<length>', '0px');
+	reg(DRAWER_CSS_VARS.snapPointOffset, '<length>', '0px');
+	reg(DRAWER_CSS_VARS.swipeProgress, '<number>', '0');
+	reg(DRAWER_CSS_VARS.swipeStrength, '<number>', '1');
 }
 
 function getBaseSwipeThreshold(element: HTMLElement, direction: SwipeDirection): number {
 	const size =
-		direction === "left" || direction === "right" ? element.offsetWidth : element.offsetHeight;
+		direction === 'left' || direction === 'right' ? element.offsetWidth : element.offsetHeight;
 	return Math.max(size * 0.5, MIN_SWIPE_THRESHOLD);
 }
 
@@ -112,7 +112,7 @@ export interface DrawerRootOptions {
 	provider?: DrawerProviderState | null;
 }
 
-export const DrawerContext = new Context<DrawerRootState>("Drawer.Root");
+export const DrawerContext = new Context<DrawerRootState>('Drawer.Root');
 
 export class DrawerRootState {
 	// --- Options ---
@@ -121,7 +121,7 @@ export class DrawerRootState {
 	readonly provider: DrawerProviderState | null;
 
 	get swipeDirection(): SwipeDirection {
-		return this.opts.swipeDirection?.() ?? "down";
+		return this.opts.swipeDirection?.() ?? 'down';
 	}
 
 	// --- Elements ---
@@ -211,7 +211,7 @@ export class DrawerRootState {
 		if (!snapPoints || snapPoints.length < 2) return null;
 
 		const direction = this.swipeDirection;
-		if (direction !== "down" && direction !== "up") return null;
+		if (direction !== 'down' && direction !== 'up') return null;
 
 		const resolved = this.resolvedSnapPoints;
 		if (resolved.length < 2) return null;
@@ -245,10 +245,10 @@ export class DrawerRootState {
 	/** Signed value for the --drawer-snap-point-offset CSS var (null → 0px). */
 	readonly snapPointOffsetValue: number | null = $derived.by(() => {
 		const direction = this.swipeDirection;
-		if (!this.hasSnapPoints || (direction !== "down" && direction !== "up")) return null;
+		if (!this.hasSnapPoints || (direction !== 'down' && direction !== 'up')) return null;
 		const offset = this.activeSnapPointOffset;
 		if (offset === null) return null;
-		return direction === "up" ? -offset : offset;
+		return direction === 'up' ? -offset : offset;
 	});
 
 	/** Whether the active snap point is the full-height (value 1) snap point. */
@@ -265,8 +265,8 @@ export class DrawerRootState {
 			enabled: () => this.opts.open.current && this.nestedOpenDrawerCount === 0,
 			directions: () => {
 				const direction = this.swipeDirection;
-				if (this.hasSnapPoints && (direction === "down" || direction === "up")) {
-					return direction === "down" ? ["down", "up"] : ["up", "down"];
+				if (this.hasSnapPoints && (direction === 'down' || direction === 'up')) {
+					return direction === 'down' ? ['down', 'up'] : ['up', 'down'];
 				}
 				return [direction];
 			},
@@ -275,7 +275,7 @@ export class DrawerRootState {
 			ignoreScrollableAncestors: true,
 			movementCssVars: {
 				x: DRAWER_CSS_VARS.swipeMovementX,
-				y: DRAWER_CSS_VARS.swipeMovementY,
+				y: DRAWER_CSS_VARS.swipeMovementY
 			},
 			swipeThreshold: ({ element, direction }) => getBaseSwipeThreshold(element, direction),
 			canStart: (position, details) => {
@@ -288,11 +288,11 @@ export class DrawerRootState {
 
 				const nativeEvent = details.nativeEvent;
 				const touchLike =
-					"touches" in nativeEvent ||
-					("pointerType" in nativeEvent && nativeEvent.pointerType === "touch");
+					'touches' in nativeEvent ||
+					('pointerType' in nativeEvent && nativeEvent.pointerType === 'touch');
 				if (touchLike && shouldIgnoreSwipeForTextSelection(doc, popup)) return false;
 
-				if (nativeEvent.type === "touchstart" && isSwipeIgnoredTarget(elementAtPoint)) {
+				if (nativeEvent.type === 'touchstart' && isSwipeIgnoredTarget(elementAtPoint)) {
 					return false;
 				}
 
@@ -301,10 +301,7 @@ export class DrawerRootState {
 			onSwipeStart: (event) => {
 				// Clear a text selection within the popup on non-touch swipes so it
 				// doesn't interfere with the drag.
-				if (
-					"touches" in event ||
-					("pointerType" in event && event.pointerType === "touch")
-				) {
+				if ('touches' in event || ('pointerType' in event && event.pointerType === 'touch')) {
 					return;
 				}
 
@@ -343,7 +340,7 @@ export class DrawerRootState {
 				this.handleSwipeProgress(progress, details);
 			},
 			onRelease: (info) => this.handleSwipeRelease(info),
-			onDismiss: (event) => this.handleSwipeDismiss(event),
+			onDismiss: (event) => this.handleSwipeDismiss(event)
 		});
 
 		this.touchScroll = createDrawerTouchScroll({
@@ -351,7 +348,7 @@ export class DrawerRootState {
 			active: () => this.opts.open.current && this.nestedOpenDrawerCount === 0,
 			swipeDirection: () => this.swipeDirection,
 			swipeGesture: this.swipeGesture,
-			virtualKeyboard: () => this.virtualKeyboard,
+			virtualKeyboard: () => this.virtualKeyboard
 		});
 	}
 
@@ -373,13 +370,15 @@ export class DrawerRootState {
 			onpointerdown: (event: PointerEvent) => {
 				this.touchScroll.notePointerDown(event);
 
-				if (!untrack(() => this.opts.open.current) || untrack(() => this.nestedOpenDrawerCount) > 0) {
+				if (
+					!untrack(() => this.opts.open.current) ||
+					untrack(() => this.nestedOpenDrawerCount) > 0
+				) {
 					return;
 				}
 
 				const currentTarget = event.currentTarget;
-				const doc =
-					currentTarget instanceof HTMLElement ? currentTarget.ownerDocument : document;
+				const doc = currentTarget instanceof HTMLElement ? currentTarget.ownerDocument : document;
 				const elementAtPoint = getElementAtPoint(doc, event.clientX, event.clientY);
 				// Pointer (mouse/pen) swipes never start from the scrollable content
 				// region, so text can still be selected there with a mouse.
@@ -387,24 +386,24 @@ export class DrawerRootState {
 					return;
 				}
 
-				if (event.pointerType === "touch") return;
+				if (event.pointerType === 'touch') return;
 				pointer.onpointerdown(event);
 			},
 			onpointermove: (event: PointerEvent) => {
-				if (event.pointerType === "touch") return;
+				if (event.pointerType === 'touch') return;
 				pointer.onpointermove(event);
 			},
 			onpointerup: (event: PointerEvent) => {
 				this.touchScroll.notePointerSettled(event);
-				if (event.pointerType === "touch") return;
+				if (event.pointerType === 'touch') return;
 				pointer.onpointerup(event);
 			},
 			onpointercancel: (event: PointerEvent) => {
 				this.touchScroll.notePointerSettled(event);
-				if (event.pointerType === "touch") return;
+				if (event.pointerType === 'touch') return;
 				pointer.onpointercancel(event);
 			},
-			...this.touchScroll.handlers,
+			...this.touchScroll.handlers
 		};
 	}
 
@@ -421,14 +420,14 @@ export class DrawerRootState {
 		// and apply overshoot damping past the fully-open edge.
 		if (
 			this.swipeGesture.swiping &&
-			direction === "down" &&
+			direction === 'down' &&
 			hasSnapPoints &&
 			details &&
 			Number.isFinite(details.deltaY)
 		) {
 			const popup = untrack(() => this.popupElement);
 			if (popup) {
-				popup.style.removeProperty("transform");
+				popup.style.removeProperty('transform');
 				popup.style.setProperty(
 					DRAWER_CSS_VARS.swipeMovementY,
 					`${getSnapPointSwipeMovement(untrack(() => this.activeSnapPointOffset) ?? 0, details.deltaY)}px`
@@ -438,12 +437,12 @@ export class DrawerRootState {
 
 		const currentDirection = details?.direction ?? this.swipeGesture.swipeDirection;
 		const isDismissSwipe = currentDirection === undefined || currentDirection === direction;
-		const isVerticalSwipe = direction === "down" || direction === "up";
+		const isVerticalSwipe = direction === 'down' || direction === 'up';
 		const shouldTrackProgress =
 			(hasSnapPoints && isVerticalSwipe) ||
 			!hasSnapPoints ||
-			direction === "left" ||
-			direction === "right" ||
+			direction === 'left' ||
+			direction === 'right' ||
 			isDismissSwipe;
 
 		// With snap points, express the progress relative to the range between
@@ -462,11 +461,11 @@ export class DrawerRootState {
 				);
 			} else if (untrack(() => this.snapPointProgress) !== null) {
 				resolvedProgress = untrack(() => this.snapPointProgress)!;
-			} else if (currentDirection === "down" || currentDirection === "up") {
+			} else if (currentDirection === 'down' || currentDirection === 'up') {
 				const displacement = progress * popupHeight;
 				const baseOffset = untrack(() => this.activeSnapPointOffset) ?? snapPointRange.minOffset;
 				const nextOffset =
-					currentDirection === "down" ? baseOffset + displacement : baseOffset - displacement;
+					currentDirection === 'down' ? baseOffset + displacement : baseOffset - displacement;
 				resolvedProgress = clamp(
 					(nextOffset - snapPointRange.minOffset) / snapPointRange.range,
 					0,
@@ -495,14 +494,14 @@ export class DrawerRootState {
 
 		this.provider?.visualStateStore.set({
 			swipeProgress,
-			frontmostHeight: swipeProgress > 0 ? frontmostHeight : 0,
+			frontmostHeight: swipeProgress > 0 ? frontmostHeight : 0
 		});
 
 		const backdrop = untrack(() => this.backdropElement);
 		if (!backdrop) return;
 
 		if (!isActive || swipeProgress <= 0) {
-			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, "0");
+			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
 			backdrop.style.removeProperty(DRAWER_CSS_VARS.height);
 			return;
 		}
@@ -520,10 +519,7 @@ export class DrawerRootState {
 	/** Child → parent: the nested drawer's swipe progress (fades the parent popup). */
 	onNestedSwipeProgressChange(progress: number) {
 		const popup = untrack(() => this.popupElement);
-		popup?.style.setProperty(
-			DRAWER_CSS_VARS.swipeProgress,
-			progress > 0 ? `${progress}` : "0"
-		);
+		popup?.style.setProperty(DRAWER_CSS_VARS.swipeProgress, progress > 0 ? `${progress}` : '0');
 		this.parent?.onNestedSwipeProgressChange(progress);
 	}
 
@@ -572,7 +568,7 @@ export class DrawerRootState {
 		if (this.nestedSwipeActive || !details || !this.parent) return;
 
 		const direction = details.direction ?? untrack(() => this.swipeDirection);
-		const delta = direction === "left" || direction === "right" ? details.deltaX : details.deltaY;
+		const delta = direction === 'left' || direction === 'right' ? details.deltaX : details.deltaY;
 		if (!Number.isFinite(delta) || Math.abs(delta) < MIN_SWIPE_THRESHOLD) return;
 
 		this.nestedSwipeActive = true;
@@ -606,21 +602,21 @@ export class DrawerRootState {
 		}
 
 		const baseThreshold = getBaseSwipeThreshold(element, direction);
-		const delta = direction === "left" || direction === "right" ? deltaX : deltaY;
+		const delta = direction === 'left' || direction === 'right' ? deltaX : deltaY;
 		if (!Number.isFinite(delta)) {
 			this.clearSwipeRelease();
 			return undefined;
 		}
 
-		const directionalDelta = direction === "left" || direction === "up" ? -delta : delta;
+		const directionalDelta = direction === 'left' || direction === 'up' ? -delta : delta;
 		if (directionalDelta <= 0) {
 			this.clearSwipeRelease();
 			return false;
 		}
 
 		// Fast swipe → dismiss regardless of distance.
-		const velocity = direction === "left" || direction === "right" ? velocityX : velocityY;
-		const directionalVelocity = direction === "left" || direction === "up" ? -velocity : velocity;
+		const velocity = direction === 'left' || direction === 'right' ? velocityX : velocityY;
+		const directionalVelocity = direction === 'left' || direction === 'up' ? -velocity : velocity;
 		if (directionalVelocity >= FAST_SWIPE_VELOCITY && directionalDelta > 0) {
 			this.startSwipeRelease(direction, info, 0);
 			return true;
@@ -637,7 +633,7 @@ export class DrawerRootState {
 
 	private handleSnapPointsRelease(info: SwipeReleaseInfo): boolean | undefined {
 		const direction = untrack(() => this.swipeDirection);
-		if (direction !== "down" && direction !== "up") {
+		if (direction !== 'down' && direction !== 'up') {
 			this.clearSwipeRelease();
 			return undefined;
 		}
@@ -649,7 +645,7 @@ export class DrawerRootState {
 			return undefined;
 		}
 
-		const dragDelta = direction === "down" ? info.deltaY : -info.deltaY;
+		const dragDelta = direction === 'down' ? info.deltaY : -info.deltaY;
 		if (!Number.isFinite(dragDelta)) {
 			this.clearSwipeRelease();
 			return undefined;
@@ -657,8 +653,8 @@ export class DrawerRootState {
 
 		const dragDirection = Math.sign(dragDelta);
 		const releaseDirectionalVelocity =
-			direction === "down" ? info.releaseVelocityY : -info.releaseVelocityY;
-		const fallbackDirectionalVelocity = direction === "down" ? info.velocityY : -info.velocityY;
+			direction === 'down' ? info.releaseVelocityY : -info.releaseVelocityY;
+		const fallbackDirectionalVelocity = direction === 'down' ? info.velocityY : -info.velocityY;
 		let resolvedDirectionalVelocity = Number.isFinite(releaseDirectionalVelocity)
 			? releaseDirectionalVelocity
 			: fallbackDirectionalVelocity;
@@ -803,8 +799,8 @@ export class DrawerRootState {
 
 		this.finishNestedSwipe();
 		this.setSwipeDismissedAttributes(true);
-		popup.style.removeProperty("transition");
-		popup.setAttribute("data-ending-style", "");
+		popup.style.removeProperty('transition');
+		popup.setAttribute('data-ending-style', '');
 
 		const scalar = this.resolveSwipeReleaseScalar(direction, info, snapBaseOffset);
 		this.swipeRelease = scalar;
@@ -833,36 +829,35 @@ export class DrawerRootState {
 		if (!element) return null;
 
 		const size =
-			direction === "left" || direction === "right" ? element.offsetWidth : element.offsetHeight;
+			direction === 'left' || direction === 'right' ? element.offsetWidth : element.offsetHeight;
 		if (!Number.isFinite(size) || size <= 0) return null;
 
-		const axisDelta = direction === "left" || direction === "right" ? info.deltaX : info.deltaY;
+		const axisDelta = direction === 'left' || direction === 'right' ? info.deltaX : info.deltaY;
 		let baseOffset = 0;
-		if (direction === "down") {
+		if (direction === 'down') {
 			baseOffset = snapBaseOffset;
-		} else if (direction === "up") {
+		} else if (direction === 'up') {
 			baseOffset = -snapBaseOffset;
 		}
 
 		const translation = baseOffset + axisDelta;
 		const translationAlongDirection =
-			direction === "left" || direction === "up" ? -translation : translation;
+			direction === 'left' || direction === 'up' ? -translation : translation;
 		const remainingDistance = Math.max(0, size - translationAlongDirection);
 		if (!Number.isFinite(remainingDistance) || remainingDistance <= 0) return null;
 
 		const axisVelocity =
-			direction === "left" || direction === "right"
-				? info.releaseVelocityX
-				: info.releaseVelocityY;
+			direction === 'left' || direction === 'right' ? info.releaseVelocityX : info.releaseVelocityY;
 		const fallbackVelocity =
-			direction === "left" || direction === "right" ? info.velocityX : info.velocityY;
+			direction === 'left' || direction === 'right' ? info.velocityX : info.velocityY;
 		const resolvedVelocity =
-			Math.abs(axisVelocity) > 0 && Number.isFinite(axisVelocity)
-				? axisVelocity
-				: fallbackVelocity;
+			Math.abs(axisVelocity) > 0 && Number.isFinite(axisVelocity) ? axisVelocity : fallbackVelocity;
 		const directionalVelocity =
-			direction === "left" || direction === "up" ? -resolvedVelocity : resolvedVelocity;
-		if (!Number.isFinite(directionalVelocity) || directionalVelocity <= MIN_SWIPE_RELEASE_VELOCITY) {
+			direction === 'left' || direction === 'up' ? -resolvedVelocity : resolvedVelocity;
+		if (
+			!Number.isFinite(directionalVelocity) ||
+			directionalVelocity <= MIN_SWIPE_RELEASE_VELOCITY
+		) {
 			return null;
 		}
 
@@ -899,7 +894,7 @@ export class DrawerRootState {
 		// Strip the synthetic ending-style bridge (set in startSwipeRelease) when
 		// the close was cancelled or the drawer reopens.
 		if (popup && untrack(() => this.opts.open.current)) {
-			popup.removeAttribute("data-ending-style");
+			popup.removeAttribute('data-ending-style');
 		}
 		popup?.style.removeProperty(DRAWER_CSS_VARS.swipeStrength);
 		untrack(() => this.backdropElement)?.style.removeProperty(DRAWER_CSS_VARS.swipeStrength);
@@ -912,7 +907,7 @@ export class DrawerRootState {
 		this.provider?.visualStateStore.set({ swipeProgress: 0, frontmostHeight: 0 });
 		const backdrop = untrack(() => this.backdropElement);
 		if (backdrop) {
-			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, "0");
+			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
 			backdrop.style.removeProperty(DRAWER_CSS_VARS.height);
 		}
 
@@ -921,7 +916,7 @@ export class DrawerRootState {
 
 		// In controlled usage the consumer may reject the close (keep `open`
 		// true). Check on the next frame and revert the dismiss visuals if so.
-		if (typeof requestAnimationFrame === "function") {
+		if (typeof requestAnimationFrame === 'function') {
 			this.cancelRevertFrame();
 			this.revertFrame = requestAnimationFrame(() => {
 				this.revertFrame = 0;
@@ -964,7 +959,7 @@ export class DrawerRootState {
 
 		const backdrop = untrack(() => this.backdropElement);
 		if (backdrop) {
-			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, "0");
+			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
 			backdrop.style.removeProperty(DRAWER_CSS_VARS.height);
 		}
 	}
@@ -975,9 +970,9 @@ export class DrawerRootState {
 		const backdrop = untrack(() => this.backdropElement);
 		if (!backdrop) return;
 		if (swiping) {
-			backdrop.setAttribute("data-swiping", "");
+			backdrop.setAttribute('data-swiping', '');
 		} else {
-			backdrop.removeAttribute("data-swiping");
+			backdrop.removeAttribute('data-swiping');
 		}
 	}
 
@@ -985,11 +980,11 @@ export class DrawerRootState {
 		const popup = untrack(() => this.popupElement);
 		const backdrop = untrack(() => this.backdropElement);
 		if (dismissed) {
-			popup?.setAttribute("data-swipe-dismiss", "");
-			backdrop?.setAttribute("data-swipe-dismiss", "");
+			popup?.setAttribute('data-swipe-dismiss', '');
+			backdrop?.setAttribute('data-swipe-dismiss', '');
 		} else {
-			popup?.removeAttribute("data-swipe-dismiss");
-			backdrop?.removeAttribute("data-swipe-dismiss");
+			popup?.removeAttribute('data-swipe-dismiss');
+			backdrop?.removeAttribute('data-swipe-dismiss');
 		}
 	}
 
@@ -1026,7 +1021,7 @@ export class DrawerRootState {
 
 		measure();
 
-		if (typeof ResizeObserver === "undefined") return;
+		if (typeof ResizeObserver === 'undefined') return;
 		const observer = new ResizeObserver(measure);
 		observer.observe(element);
 		return () => {
@@ -1047,7 +1042,7 @@ export class DrawerRootState {
 
 		measure();
 
-		if (typeof ResizeObserver === "undefined") return;
+		if (typeof ResizeObserver === 'undefined') return;
 		const observer = new ResizeObserver(measure);
 		observer.observe(element);
 		return () => observer.disconnect();
