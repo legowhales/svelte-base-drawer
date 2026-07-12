@@ -353,8 +353,9 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   `sher login` requis) → URL éphémère 24h.
 - **Déploiement permanent (Cloudflare Worker)** : site de doc/démos servi en
   assets-only Worker (`wrangler.jsonc`, compte Otarie) →
-  https://svelte-base-drawer.otarie.workers.dev.
-  Redéployer : `npm run build && npx wrangler deploy`.
+  https://svelte-base-drawer.otarie.dev (custom domain, DNS+certif gérés par
+  le deploy) + https://svelte-base-drawer.otarie.workers.dev (gardé actif via
+  `workers_dev: true`). Redéployer : `npm run build && npx wrangler deploy`.
 - **Publication npm** : le package est prêt (`svelte-base-drawer@0.1.0`,
   nom vérifié disponible le 2026-07-12). `npm run package` construit `dist/`
   (`svelte-package`) et lance `publint` ; `npm publish` déclenche tout via
