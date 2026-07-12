@@ -1,0 +1,10 @@
+// Cloudflare Worker serving the prerendered docs/demo site (assets-only,
+// no worker script — the whole site is static, see svelte.config.js).
+// Deploy: npm run build && npx wrangler deploy
+{
+	"name": "svelte-base-drawer",
+	"compatibility_date": "2026-07-12",
+	"assets": {
+		"directory": "./build"
+	}
+}
