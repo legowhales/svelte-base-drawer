@@ -1,6 +1,13 @@
 @import 'tailwindcss';
 
 html, body {
-	background: var(--color-stone-950);
-	color: var(--color-stone-50);
+	color: var(--color-stone-700);
+	background: var(--color-stone-100);
+}
+
+@media (prefers-color-scheme: dark) {
+	html, body {
+		color: var(--color-stone-50);
+		background: var(--color-stone-950);
+	}
 }

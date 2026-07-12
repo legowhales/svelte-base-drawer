@@ -257,13 +257,14 @@
 		overflow-x: auto;
 		font-size: 0.8125rem;
 		line-height: 1.5;
-		background: oklch(97% 0 0deg);
-		border: 1px solid oklch(92.2% 0 0deg);
+		background: --alpha(var(--color-stone-200) / 60%);
+		border: 1px solid var(--color-stone-300);
+		border-radius: 4px;
 	}
 	@media (prefers-color-scheme: dark) {
 		.doc-code {
-			background: oklch(20.5% 0 0deg);
-			border-color: oklch(26.9% 0 0deg);
+			background: var(--color-stone-900);
+			border-color: var(--color-stone-800);
 		}
 	}
 

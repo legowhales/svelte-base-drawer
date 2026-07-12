@@ -75,17 +75,14 @@
 		ref = popupEl;
 	});
 
-	// Register the popup element and track its height.
-	$effect(() => {
-		const el = popupEl;
-		if (!el) return;
+	function trackPopupHeight(el: HTMLElement) {
 		drawer.popupElement = el;
 		const cleanup = drawer.trackPopupHeight(el);
 		return () => {
 			drawer.popupElement = null;
 			cleanup?.();
 		};
-	});
+	}
 
 	// Without a Drawer.Viewport there is no swipe handling nor touch scroll
 	// interception. Checked in a microtask so the (parent) viewport has
@@ -188,7 +185,7 @@
 	{preventScroll}
 >
 	{#snippet child({ props: dialogProps })}
-		<div bind:this={popupEl} {...mergeProps(dialogProps, mergedRestProps)}>
+		<div bind:this={popupEl} {...mergeProps(dialogProps, mergedRestProps)} {@attach trackPopupHeight}>
 			{@render children?.()}
 		</div>
 	{/snippet}

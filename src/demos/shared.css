@@ -3,16 +3,6 @@
 .demo-page {
 	min-height: 100dvh;
 	padding: 2rem;
-	font-family: system-ui, sans-serif;
-	color: oklch(14.5% 0 0deg);
-	background: white;
-}
-
-@media (prefers-color-scheme: dark) {
-	.demo-page {
-		color: white;
-		background: oklch(14.5% 0 0deg);
-	}
 }
 
 .demo-page h1 {
@@ -48,8 +38,8 @@
 	height: 2rem;
 	padding: 0 0.75rem;
 	margin: 0;
-	border: 1px solid oklch(14.5% 0 0deg);
-	background-color: white;
+	background-color: var(--color-stone-200);
+	border-radius: 7px;
 	font-family: inherit;
 	font-size: 0.875rem;
 	font-weight: 400;
@@ -63,31 +53,24 @@
 
 @media (prefers-color-scheme: dark) {
 	.demo-button {
-		border: 1px solid white;
-		background-color: oklch(14.5% 0 0deg);
+		background-color: --alpha(var(--color-stone-700) / 70%);
 		color: white;
 	}
 }
 
 @media (hover: hover) {
 	.demo-button:hover:not([data-disabled]) {
-		background-color: oklch(97% 0 0deg);
+		background-color: --alpha(var(--color-stone-300) / 70%);
 	}
 	@media (prefers-color-scheme: dark) {
 		.demo-button:hover:not([data-disabled]) {
-			background-color: oklch(26.9% 0 0deg);
+			background-color: var(--color-stone-800);
 		}
 	}
 }
 
 .demo-button:active:not([data-disabled]) {
-	background-color: oklch(92.2% 0 0deg);
-}
-
-@media (prefers-color-scheme: dark) {
-	.demo-button:active:not([data-disabled]) {
-		background-color: oklch(37.1% 0 0deg);
-	}
+	scale: 0.98;
 }
 
 .demo-button:focus-visible {
