@@ -7,7 +7,7 @@
 		"type": "git",
 		"url": "git+https://github.com/legowhales/svelte-base-drawer.git"
 	},
-	"homepage": "https://github.com/legowhales/svelte-base-drawer#readme",
+	"homepage": "https://svelte-base-drawer.otarie.dev",
 	"bugs": "https://github.com/legowhales/svelte-base-drawer/issues",
 	"type": "module",
 	"svelte": "./dist/index.js",

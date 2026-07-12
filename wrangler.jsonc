@@ -5,9 +5,6 @@
 	"name": "svelte-base-drawer",
 	"compatibility_date": "2026-07-12",
 	"routes": [{ "pattern": "svelte-base-drawer.otarie.dev", "custom_domain": true }],
-	// Keep the workers.dev URL alive alongside the custom domain (adding a
-	// route implicitly disables it otherwise).
-	"workers_dev": true,
 	"assets": {
 		"directory": "./build"
 	}

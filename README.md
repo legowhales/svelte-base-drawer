@@ -18,10 +18,14 @@ A drawer (bottom sheet) with mobile-grade gesture handling: the swipe engine, to
 
 ## Install
 
-`bits-ui` is a peer dependency:
+```sh
+npm install svelte-base-drawer
+```
+
+`bits-ui` is a peer dependency: the drawer wraps its Dialog for focus management, portals and accessibility. If your project doesn't already use it, install it as well:
 
 ```sh
-npm install svelte-base-drawer bits-ui
+npm install bits-ui
 ```
 
 Requires Svelte 5.

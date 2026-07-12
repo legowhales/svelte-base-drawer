@@ -9,7 +9,36 @@
 	import SwipeToOpen from '../demos/SwipeToOpen.svelte';
 	import ActionSheet from '../demos/ActionSheet.svelte';
 
-	const installCode = 'npm install svelte-base-drawer bits-ui';
+	const installCode = 'npm install svelte-base-drawer';
+
+	let copied = $state(false);
+	let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
+	async function copyInstallCode() {
+		let ok = false;
+		try {
+			await navigator.clipboard.writeText(installCode);
+			ok = true;
+		} catch {
+			// Clipboard API unavailable (permissions/insecure context): fall back
+			// to a transient textarea + execCommand.
+			const textarea = document.createElement('textarea');
+			textarea.value = installCode;
+			textarea.style.position = 'fixed';
+			textarea.style.opacity = '0';
+			document.body.appendChild(textarea);
+			textarea.select();
+			try {
+				ok = document.execCommand('copy');
+			} finally {
+				textarea.remove();
+			}
+		}
+		if (ok) {
+			copied = true;
+			clearTimeout(copyResetTimer);
+			copyResetTimer = setTimeout(() => (copied = false), 1500);
+		}
+	}
 
 	const usageCode = `<script>
   import * as Drawer from 'svelte-base-drawer';
@@ -135,11 +164,17 @@
 
 		<section id="install" class="doc-section">
 			<h2>Install</h2>
-			<p>
+			<div class="doc-install">
+				<pre class="doc-code"><code>{installCode}</code></pre>
+				<button type="button" class="doc-copy" onclick={copyInstallCode}>
+					{copied ? 'Copied!' : 'Copy'}
+				</button>
+			</div>
+			<p class="doc-install-note">
 				<code>bits-ui</code> is a peer dependency: the drawer wraps its Dialog for focus management, portals
-				and accessibility.
+				and accessibility. If your project doesn't already use it, install it as well:
+				<code>npm install bits-ui</code>.
 			</p>
-			<pre class="doc-code"><code>{installCode}</code></pre>
 		</section>
 
 		<section id="usage" class="doc-section">
@@ -265,6 +300,44 @@
 		.doc-code {
 			background: var(--color-stone-900);
 			border-color: var(--color-stone-800);
+		}
+	}
+
+	.doc-install {
+		position: relative;
+	}
+	/* Reserve room for the absolutely-positioned copy button. */
+	.doc-install .doc-code {
+		padding-right: 5rem;
+	}
+	.doc-install-note {
+		margin-top: 1rem;
+	}
+
+	.doc-copy {
+		position: absolute;
+		top: 50%;
+		right: 0.5rem;
+		transform: translateY(-50%);
+		padding: 0.25rem 0.625rem;
+		font: inherit;
+		font-size: 0.75rem;
+		color: inherit;
+		background: white;
+		border: 1px solid var(--color-stone-300);
+		border-radius: 4px;
+		cursor: pointer;
+	}
+	.doc-copy:hover {
+		border-color: var(--color-stone-400);
+	}
+	@media (prefers-color-scheme: dark) {
+		.doc-copy {
+			background: var(--color-stone-800);
+			border-color: var(--color-stone-700);
+		}
+		.doc-copy:hover {
+			border-color: var(--color-stone-600);
 		}
 	}
 
