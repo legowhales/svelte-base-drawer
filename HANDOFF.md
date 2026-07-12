@@ -320,6 +320,23 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
     (upstream n'en pose jamais). Nécessaire pour la molette sur les scrollers
     au niveau du viewport (mobile-nav) ; les clics sur le viewport hors popup
     restent des outside-press (dismiss) comme un clic backdrop.
+15. **`frontmostHeight` ne doit jamais survivre au popup.** Au démontage du
+    popup, `setPopupHeight(0)` remet aussi `frontmostHeight` à 0 (et
+    `onNestedFrontmostHeightChange(0)` retombe sur `popupHeight` même nul).
+    Sans ça, à la RÉOUVERTURE d'un nested la valeur périmée est poussée au
+    parent (effet de notification du Root, qui tourne sur le flip de `open`,
+    AVANT le mount du popup enfant) dans le même flush que `--nested-drawers`
+    / `data-nested-drawer-open` : le `height` du parent passe de `auto` à la
+    hauteur de l'enfant en un seul recalc de style — `auto` n'étant pas
+    interpolable, aucune transition ne part → le parent SAUTE (~76px sur la
+    démo). La 1re ouverture est fluide précisément parce que le parent
+    n'apprend la hauteur de l'enfant qu'APRÈS son mount/mesure : la lecture
+    d'`offsetHeight` du mount force un recalc intermédiaire qui épingle le
+    `height` du parent en px, et le retarget px→px suivant est animable.
+    Pas de seam de test automatisé pour ce pattern (interpolabilité CSS +
+    timing de flush — il faudrait un harnais e2e navigateur, inexistant à ce
+    jour) ; recette manuelle : ouvrir/fermer/rouvrir le nested et vérifier
+    l'absence de saut (enregistrement rAF de `getBoundingClientRect().top`).
 
 ## 6. Points connus à corriger / améliorer (pour le repreneur)
 
@@ -340,8 +357,9 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   `prepack`. bits-ui et svelte sont en `peerDependencies`, `drawer.css`
   exporté sous `svelte-base-drawer/drawer.css` (rendu autonome : la var
   Tailwind `--color-stone-200` a été remplacée par sa valeur littérale).
-  Manque avant publication réelle : champ `repository` (pas de remote git),
-  et trancher le naming `Drawer.Handle` (voir plus bas).
+  Champ `repository` ajouté (remote GitHub `legowhales/svelte-base-drawer`).
+  Le naming `Drawer.Handle` est publié tel quel en 0.1.x (voir plus bas) —
+  un renommage éventuel se fera via alias + dépréciation avant la 1.0.
 - **Démo indent** : la mécanique est validée (data-active, portal local,
   scale) mais le layout du cadre mérite un polish visuel (positionnement du
   popup dans le petit cadre).
@@ -447,7 +465,13 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
    du mobile-nav). Démo basic réécrite dans le langage visuel commun
    (`src/demos/basic.css`, bordure noire/ombre dure) avec contenu réaliste :
    email en tête, texte scrollable, second input, Close.
-7. **Fix cible SVG dans `getTargetAtPoint`** : le port filtrait le target avec
+7. **Fix saut du parent à la réouverture d'un nested (2026-07-12)** :
+   `frontmostHeight` périmé après démontage du popup enfant → poussé au parent
+   avant le remount → `height` du parent `auto`→px en un recalc, non
+   interpolable, saut sec. Corrigé dans `setPopupHeight` (reset à 0 au
+   démontage) + `onNestedFrontmostHeightChange` (retombe sur `popupHeight`
+   même nul). Voir piège n°15.
+8. **Fix cible SVG dans `getTargetAtPoint`** : le port filtrait le target avec
    `isHTMLElement` là où l'upstream ne fait qu'un cast TypeScript. Un clic
    pointer sur une icône `<svg>` dans un bouton (le « x » du mobile-nav)
    donnait donc `target: null` → le sélecteur d'ignore interactif ne matchait

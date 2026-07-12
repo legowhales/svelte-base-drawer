@@ -155,6 +155,12 @@ effect_update_depth n'apparaît qu'en console). Toujours `untrack()` les appels 
 - **Attributs impératifs vs template** : un attribut posé via setAttribute survit aux re-renders SEULEMENT s'il n'apparaît jamais dans le template/spread. `data-swipe-dismiss`/`data-ending-style` sont impératifs only.
 - **Effets enfant avant parent** au mount initial en Svelte : le warning "no viewport" du Popup est vérifié dans un queueMicrotask.
 - **`swipeDirection` réactif** : passé en getter au state (sinon warning state_referenced_locally + valeur figée).
+- **`frontmostHeight` ne survit jamais au popup** : reset à 0 au démontage
+  (`setPopupHeight(0)`), sinon la valeur périmée est poussée au parent à la
+  RÉOUVERTURE du nested avant le mount de l'enfant → le `height` du parent
+  passe `auto`→px en un seul recalc (non interpolable, pas de transition) →
+  le parent saute. La 1re ouverture est fluide car la hauteur enfant n'arrive
+  qu'après mount/mesure (retarget px→px animable). HANDOFF piège n°15.
 
 ## Reste à faire / pistes
 
@@ -164,6 +170,7 @@ effect_update_depth n'apparaît qu'en console). Toujours `untrack()` les appels 
   direct de `useTriggerRegistration`.
 - `snapPoints` + `swipeDirection` up : le mouvement override dans `handleSwipeProgress`
   n'est appliqué que pour "down" (comme upstream).
-- ~~Éventuel package~~ FAIT (voir section "Package npm"). Avant `npm publish` :
-  ajouter le champ `repository` (pas encore de remote git) et trancher le
-  naming `Drawer.Handle` (divergence upstream, voir HANDOFF §6).
+- ~~Éventuel package~~ FAIT et PUBLIÉ sur npm (`svelte-base-drawer`, remote
+  GitHub `legowhales/svelte-base-drawer`). Le naming `Drawer.Handle` est parti
+  tel quel en 0.1.x (divergence upstream, voir HANDOFF §6) — renommage
+  éventuel via alias + dépréciation avant la 1.0.

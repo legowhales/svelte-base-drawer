@@ -536,10 +536,10 @@ export class DrawerRootState {
 		}
 
 		this.nestedFrontmostActive = false;
-		const ownHeight = untrack(() => this.popupHeight);
-		if (ownHeight > 0) {
-			this.frontmostHeight = ownHeight;
-		}
+		// Fall back to the own popup height even when it is 0 (popup unmounted):
+		// frontmostHeight must never outlive the popup, or the stale value leaks
+		// into the next open (see setPopupHeight).
+		this.frontmostHeight = untrack(() => this.popupHeight);
 	}
 
 	/** Child → parent: a nested drawer is being swiped. */
@@ -992,7 +992,13 @@ export class DrawerRootState {
 
 	private setPopupHeight(height: number) {
 		this.popupHeight = height;
-		if (!this.nestedFrontmostActive && height > 0) {
+		// Track 0 too (popup unmount): a stale frontmostHeight would be pushed to
+		// the parent on the NEXT open before this popup mounts, landing the
+		// parent's height change in the same style recalc as its auto→px switch —
+		// which cannot transition, so the parent visibly jumps. Resetting here
+		// makes every open behave like the first: the parent only adopts the
+		// child's height after the child has actually mounted and measured.
+		if (!this.nestedFrontmostActive) {
 			this.frontmostHeight = height;
 		}
 	}
