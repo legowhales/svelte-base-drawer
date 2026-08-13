@@ -352,7 +352,14 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
 
 - **Tests sur appareils réels iOS/Android** — première passe mobile validée
   le 2026-07-12 (démos OK sur l'appareil du propriétaire, via un build
-  partagé). Reste à couvrir systématiquement : tap-to-focus clavier, scroll
+  partagé). Passe v1.7.0 validée le 2026-08-13 (via le worker dev) :
+  tap-to-focus entre champs fluide ; **les flèches ◀▶ du clavier iOS font
+  encore sauter page+drawer — comportement IDENTIQUE sur la démo base-ui
+  officielle** : limite résiduelle upstream de #5179 (WebKit commit son
+  reveal scroll avant qu'on puisse le neutraliser), PAS un bug du port — ne
+  pas chercher à le « corriger » ici, signaler upstream le cas échéant.
+  Le fix #5257 (scroll horizontal dans le drawer) n'est pas couvert par les
+  démos (aucun contenu horizontal) — sera éprouvé dans l'appli consommatrice. Reste à couvrir systématiquement : tap-to-focus clavier, scroll
   slack, ghost clicks, CloseWatcher Android, inertie. La démo
   `virtual-keyboard` (sticky footer `:focus-within`) est le banc d'essai
   principal. Dev server : `npm run dev` (port 5173), accessible sur le
