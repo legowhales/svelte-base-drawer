@@ -1,6 +1,6 @@
 /**
  * Touch scroll interception for the drawer viewport.
- * Port of base-ui v1.6.0 DrawerViewport touch handling.
+ * Port of base-ui v1.7.0 DrawerViewport touch handling.
  *
  * The critical piece for mobile: a single capture-phase `touchmove` listener on
  * the document decides between native scrolling and the drawer swipe, and when
@@ -27,6 +27,9 @@ import {
 	getCrossScrollAxis
 } from './utils.js';
 
+const AXIS_LOCK_SLOP = 6;
+const AXIS_LOCK_BIAS = 2;
+
 interface TouchScrollState {
 	startX: number;
 	startY: number;
@@ -37,6 +40,8 @@ interface TouchScrollState {
 	/** null = undecided, true = swipe claimed, false = native scroll */
 	allowSwipe: boolean | null;
 	preserveNativeCrossAxisScroll: boolean;
+	/** Set once the drawer axis wins the slop arbitration (one-shot per gesture) */
+	drawerAxisAttributed: boolean;
 }
 
 export interface DrawerTouchScrollOptions {
@@ -82,38 +87,20 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 	}
 
 	/**
-	 * Capture-phase native touchmove handler (registered with {passive: false}).
-	 * Decides scroll vs swipe, and when the swipe wins, claims the gesture and
-	 * feeds the engine directly.
+	 * Body of the native touchmove handler. Decides scroll vs swipe, and when
+	 * the swipe wins, claims the gesture and feeds the engine directly. The
+	 * wrapper always updates the touch position afterwards, whichever branch
+	 * returns here.
 	 */
-	function handleNativeTouchMove(event: TouchEvent) {
-		// The virtual keyboard provider observes the move to tell a tap apart from
-		// a drag. It must run even when the swipe claims the event below with
-		// stopPropagation(), which would otherwise hide the move from it.
-		getVirtualKeyboard()?.onTouchMove(event);
-
-		if (ignoreTouchSwipe) return;
-
-		const ts = touchState;
-		const touch = event.touches[0];
-		if (!touch || !ts) return;
-
+	function processTouchMove(event: TouchEvent, ts: TouchScrollState, touch: Touch) {
 		const direction = getDirection();
 		const scrollAxis = getScrollAxis(direction);
 		const isVertical = scrollAxis === 'vertical';
 
 		const drawerAxisDelta = isVertical ? touch.clientY - ts.lastY : touch.clientX - ts.lastX;
 
-		// Preserve native range interaction by never locking touchmove for range inputs.
-		if (isEventOnRangeInput(event)) {
-			ts.allowSwipe = false;
-			updateTouchPosition(ts, touch);
-			return;
-		}
-
 		// Avoid blocking pinch zoom or text selection adjustments on iOS Safari.
 		if (event.touches.length >= 2) {
-			updateTouchPosition(ts, touch);
 			return;
 		}
 
@@ -123,13 +110,12 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 
 		// Allow the native move when text is selected or the drawer isn't active.
 		if (shouldIgnoreSwipeForTextSelection(doc, root) || !isActive()) {
-			updateTouchPosition(ts, touch);
 			return;
 		}
 
-		// Preserve native cross-axis scroll (e.g. a horizontal carousel in a bottom drawer).
-		if (preserveNativeCrossAxisScrollOnMove(ts, touch, isVertical)) {
-			updateTouchPosition(ts, touch);
+		// Yield to a native cross-axis scroll (e.g. a horizontal carousel in a
+		// bottom drawer), or while neither axis has passed the slop yet.
+		if (shouldYieldTouchMove(ts, event, touch, isVertical)) {
 			return;
 		}
 
@@ -143,7 +129,6 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 			}
 			event.stopPropagation();
 			options.swipeGesture.moveNative(event, root);
-			updateTouchPosition(ts, touch);
 			return;
 		}
 
@@ -154,7 +139,6 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 				event.preventDefault();
 			}
 			event.stopPropagation();
-			updateTouchPosition(ts, touch);
 			return;
 		}
 
@@ -168,9 +152,7 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 			);
 
 			if (!ts.allowSwipe) {
-				if (!event.cancelable) {
-					ts.allowSwipe = false;
-				} else if (canSwipeFromEdge) {
+				if (event.cancelable && canSwipeFromEdge) {
 					ts.allowSwipe = true;
 					event.preventDefault();
 				} else {
@@ -185,7 +167,24 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 			event.stopPropagation();
 			options.swipeGesture.moveNative(event, root);
 		}
+	}
 
+	/**
+	 * Capture-phase native touchmove handler (registered with {passive: false}).
+	 */
+	function handleNativeTouchMove(event: TouchEvent) {
+		// The virtual keyboard provider observes the move to tell a tap apart from
+		// a drag. It must run even when the swipe claims the event below with
+		// stopPropagation(), which would otherwise hide the move from it.
+		getVirtualKeyboard()?.onTouchMove(event);
+
+		if (ignoreTouchSwipe) return;
+
+		const ts = touchState;
+		const touch = event.touches[0];
+		if (!touch || !ts) return;
+
+		processTouchMove(event, ts, touch);
 		updateTouchPosition(ts, touch);
 	}
 
@@ -229,12 +228,11 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 
 		const root = getRoot();
 		if (!root) return;
-		const doc = root.ownerDocument;
 
-		const elementAtPoint = getElementAtPoint(doc, touch.clientX, touch.clientY);
+		const elementAtPoint = getElementAtPoint(root.getRootNode(), touch.clientX, touch.clientY);
 		const eventTarget = getEventTarget(event);
-		const target = eventTarget instanceof Element ? eventTarget : null;
-		if (target && !root.contains(target)) {
+		const target = eventTarget instanceof Element ? eventTarget : root;
+		if (!root.contains(target)) {
 			ignoreTouchSwipe = true;
 			touchState = null;
 			return;
@@ -252,12 +250,9 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 		const scrollAxis = getScrollAxis(direction);
 		const crossAxis = getCrossScrollAxis(direction);
 
-		let scrollTarget: HTMLElement | null = null;
-		let hasCrossAxisScrollableContent = false;
-		if (target) {
-			scrollTarget = findScrollableTouchTarget(target, root, scrollAxis);
-			hasCrossAxisScrollableContent = findScrollableTouchTarget(target, root, crossAxis) !== null;
-		}
+		const scrollTarget = findScrollableTouchTarget(target, root, scrollAxis);
+		const hasCrossAxisScrollableContent =
+			findScrollableTouchTarget(target, root, crossAxis) !== null;
 
 		let allowSwipe: boolean | null = null;
 		if (scrollTarget) {
@@ -273,7 +268,8 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 			scrollTarget,
 			hasCrossAxisScrollableContent,
 			allowSwipe,
-			preserveNativeCrossAxisScroll: false
+			preserveNativeCrossAxisScroll: false,
+			drawerAxisAttributed: false
 		};
 
 		options.swipeGesture.touch.start(event);
@@ -328,14 +324,35 @@ function updateTouchPosition(ts: TouchScrollState, touch: Touch) {
 	ts.lastY = touch.clientY;
 }
 
-function preserveNativeCrossAxisScrollOnMove(
+/**
+ * Arbitrates a touchmove between the drawer swipe and a native cross-axis scroll.
+ * Returns `true` when the move must be left alone — either because the cross axis
+ * already won the gesture, or because neither axis has passed the slop yet and
+ * the gesture cannot be attributed.
+ */
+function shouldYieldTouchMove(
 	ts: TouchScrollState,
+	event: TouchEvent,
 	touch: Touch,
 	isVerticalAxis: boolean
 ): boolean {
 	if (ts.preserveNativeCrossAxisScroll) return true;
 
-	if (ts.allowSwipe === true || !ts.hasCrossAxisScrollableContent) return false;
+	// Attribution happens once per gesture. Re-arbitrating after the drawer axis
+	// has won would let the pre-attribution branches below fire mid-drag (the slop
+	// is measured from the touch origin, which is never re-baselined), freezing
+	// the popup and dropping `preventDefault()`.
+	if (ts.drawerAxisAttributed || ts.allowSwipe === true || !ts.hasCrossAxisScrollableContent) {
+		return false;
+	}
+
+	// A non-cancelable touchmove means the browser has already committed the
+	// gesture to a native scroll; claiming it for the swipe would drag the popup
+	// alongside the scrolling content.
+	if (!event.cancelable) {
+		ts.preserveNativeCrossAxisScroll = true;
+		return true;
+	}
 
 	const drawerAxisGestureDelta = isVerticalAxis
 		? touch.clientY - ts.startY
@@ -346,8 +363,19 @@ function preserveNativeCrossAxisScrollOnMove(
 	const absDrawerDelta = Math.abs(drawerAxisGestureDelta);
 	const absCrossDelta = Math.abs(crossAxisGestureDelta);
 
-	if (absCrossDelta < 6 || absCrossDelta <= absDrawerDelta + 2) return false;
+	if (absCrossDelta >= AXIS_LOCK_SLOP && absCrossDelta > absDrawerDelta + AXIS_LOCK_BIAS) {
+		ts.preserveNativeCrossAxisScroll = true;
+		return true;
+	}
 
-	ts.preserveNativeCrossAxisScroll = true;
+	if (absDrawerDelta >= AXIS_LOCK_SLOP) {
+		ts.drawerAxisAttributed = true;
+		return false;
+	}
+
+	// Neither axis has traveled past the slop yet, so the gesture cannot be
+	// attributed. Leave the event alone: on iOS, `preventDefault()` on the first
+	// cancelable touchmove cancels native scrolling for the entire gesture, which
+	// would lock a cross-axis scroll that only passes the slop on a later move.
 	return true;
 }

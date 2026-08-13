@@ -1,5 +1,5 @@
 /**
- * Global drawer coordination. Port of base-ui v1.6.0 DrawerProvider.
+ * Global drawer coordination. Port of base-ui v1.7.0 DrawerProvider.
  *
  * Tracks whether ANY drawer under the provider is open (`active`, consumed by
  * Drawer.Indent / Drawer.IndentBackground) and exposes an imperative

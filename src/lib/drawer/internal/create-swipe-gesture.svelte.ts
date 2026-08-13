@@ -1,6 +1,6 @@
 /**
  * Core swipe gesture engine.
- * Faithful port of base-ui v1.6.0 `useSwipeDismiss` adapted to Svelte 5.
+ * Faithful port of base-ui v1.7.0 `useSwipeDismiss` adapted to Svelte 5.
  *
  * Key behaviors (mirroring upstream):
  * - The swipe starts immediately on pointerdown/touchstart when allowed; when the
@@ -140,6 +140,9 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	let elementSize = { width: 0, height: 0 };
 	let swipeProgress = 0;
 	let swipeThreshold = swipeThresholdDefault;
+	let swipeThresholdFunction:
+		| ((details: { element: HTMLElement; direction: SwipeDirection }) => number)
+		| null = null;
 	let swipeStartTime: number | null = null;
 	let lastDragSample: DragSample | null = null;
 	let lastDragVelocity = { x: 0, y: 0 };
@@ -190,15 +193,11 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	function resolveSwipeThreshold(direction: SwipeDirection | undefined) {
 		if (!direction) return;
 
-		if (typeof swipeThresholdProp !== 'function') {
-			swipeThreshold = swipeThresholdDefault;
-			return;
-		}
-
 		const element = getElement();
-		if (!element) return;
+		const thresholdFunction = swipeThresholdFunction;
+		if (!element || !thresholdFunction) return;
 
-		swipeThreshold = Math.max(0, swipeThresholdProp({ element, direction }));
+		swipeThreshold = Math.max(0, thresholdFunction({ element, direction }));
 	}
 
 	function updateSwipeProgress(progress: number, details?: SwipeProgressDetails) {
@@ -286,6 +285,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		updateSwipeProgress(0);
 
 		swipeThreshold = swipeThresholdDefault;
+		swipeThresholdFunction = null;
 		dragStartPos = { x: 0, y: 0 };
 		dragOffset = { x: 0, y: 0 };
 		initialTransform = { x: 0, y: 0, scale: 1 };
@@ -326,8 +326,8 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	}
 
 	function getTargetAtPoint(position: { x: number; y: number }, event: Event): Element | null {
-		const doc = getElement()?.ownerDocument ?? document;
-		const elementAtPoint = getElementAtPoint(doc, position.x, position.y);
+		const root = getElement()?.getRootNode();
+		const elementAtPoint = getElementAtPoint(root, position.x, position.y);
 		const target = elementAtPoint ?? getEventTarget(event);
 		// No HTMLElement narrowing here (upstream only type-casts): an SVG icon
 		// inside a <button> must still match the interactive-elements ignore
@@ -401,6 +401,8 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		swipeStartTime = getValidTimeStamp(event.timeStamp);
 		swipeCancelBaseline = position;
 		lastMovePos = position;
+		swipeThreshold = swipeThresholdDefault;
+		swipeThresholdFunction = typeof swipeThresholdProp === 'function' ? swipeThresholdProp : null;
 
 		if (element) {
 			elementSize = { width: element.offsetWidth, height: element.offsetHeight };
@@ -523,7 +525,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		pendingSwipe = true;
 		pendingSwipeStartPos = startPos;
 		swipeFromScrollable = false;
-		sawPrimaryButtonsOnMove = false;
+		sawPrimaryButtonsOnMove = !('touches' in event);
 
 		const { primaryDirection } = getDirectionState();
 		const allowedToStart = options.canStart
@@ -563,14 +565,21 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		}
 
 		if (isFirstPointerMove) {
-			// Adjust the starting position to the current position on the first move
-			// to account for the delay between pointerdown and the first pointermove on iOS.
-			dragStartPos = position;
-			const moveTime = getValidTimeStamp(event.timeStamp);
-			if (moveTime !== null) {
-				swipeStartTime = moveTime;
-			}
 			isFirstPointerMove = false;
+			// Reset the drag origin to the first move's position to absorb the gap between the press and
+			// the first move event — notably on iOS touch, where the first `touchmove` arrives already
+			// offset from the `touchstart` — which would otherwise make the dragged element jump. This
+			// only matters when an element follows the pointer; when `trackDrag` is false (e.g. the
+			// swipe-area, which only opens the drawer) keep the original press position so a quick flick
+			// still registers: on a low-refresh-rate display the whole travel can land in this single
+			// first move, and discarding it would drop the gesture.
+			if (trackDrag) {
+				dragStartPos = position;
+				const moveTime = getValidTimeStamp(event.timeStamp);
+				if (moveTime !== null) {
+					swipeStartTime = moveTime;
+				}
+			}
 		}
 
 		const clientX = position.x;
@@ -671,8 +680,20 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			}
 		}
 
+		// Only rewrite drag styles when the drag offset actually changed. `syncDragStyles` writes the
+		// raw (undamped) frozen transform and movement vars, relying on the consumer's `onProgress`
+		// to overwrite them with damped styles — but `updateSwipeProgress` dedupes unchanged
+		// deltas and skips `onProgress`. A move that doesn't change the offset (e.g. the cursor
+		// pinned at a screen edge during an off-screen drag, jittering only on the ignored axis)
+		// would otherwise reinstate the raw styles with no correction, jumping the element to the
+		// undamped position.
+		const previousOffset = dragOffset;
+		const offsetChanged = newOffsetX !== previousOffset.x || newOffsetY !== previousOffset.y;
+
 		dragOffset = { x: newOffsetX, y: newOffsetY };
-		syncDragStyles(true);
+		if (offsetChanged) {
+			syncDragStyles(true);
+		}
 		recordDragSample({ x: newOffsetX, y: newOffsetY }, getValidTimeStamp(event.timeStamp));
 
 		const dragDeltaX = newOffsetX - initialTransform.x;
@@ -911,33 +932,11 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			dismissDirection = intendedSwipeDirection ?? getDirectionState().primaryDirection;
 		} else {
 			for (const direction of getDirectionState().directions) {
-				switch (direction) {
-					case 'right':
-						if (deltaX > swipeThreshold) {
-							shouldClose = true;
-							dismissDirection = 'right';
-						}
-						break;
-					case 'left':
-						if (deltaX < -swipeThreshold) {
-							shouldClose = true;
-							dismissDirection = 'left';
-						}
-						break;
-					case 'down':
-						if (deltaY > swipeThreshold) {
-							shouldClose = true;
-							dismissDirection = 'down';
-						}
-						break;
-					case 'up':
-						if (deltaY < -swipeThreshold) {
-							shouldClose = true;
-							dismissDirection = 'up';
-						}
-						break;
+				if (getDisplacement(direction, deltaX, deltaY) > swipeThreshold) {
+					shouldClose = true;
+					dismissDirection = direction;
+					break;
 				}
-				if (shouldClose) break;
 			}
 		}
 

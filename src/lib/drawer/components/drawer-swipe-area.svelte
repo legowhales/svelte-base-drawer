@@ -2,7 +2,12 @@
 	import { untrack } from 'svelte';
 	import { createSwipeGesture } from '../internal/create-swipe-gesture.svelte.js';
 	import { DrawerContext, DRAWER_CSS_VARS } from '../internal/drawer-state.svelte.js';
-	import { getDisplacement, getElementTransform, type SwipeDirection } from '../internal/utils.js';
+	import {
+		getDisplacement,
+		getElementTransform,
+		isVirtualClick,
+		type SwipeDirection
+	} from '../internal/utils.js';
 	import type { Snippet } from 'svelte';
 	import type { HTMLAttributes } from 'svelte/elements';
 
@@ -60,23 +65,59 @@
 	let dragDelta = { x: 0, y: 0 };
 	let closedOffset: number | null = null;
 	let appliedSwipeStyles = false;
+	// The elements the swipe styles were applied to; cleanup targets these, not
+	// the current refs, so a popup swapped mid-gesture still gets cleaned.
+	let swipePopupElement: HTMLElement | null = null;
+	let swipeBackdropElement: HTMLElement | null = null;
 	let popupTransition: string | null = null;
-	let releaseDismissTimeout: ReturnType<typeof setTimeout> | undefined;
+	const noop = () => {};
+	let releaseGuardCleanup: () => void = noop;
 
 	function disableDismissForSwipe() {
-		clearTimeout(releaseDismissTimeout);
+		releaseGuardCleanup();
 		drawer.outsidePressDisabled = true;
 	}
 
 	function enableDismissAfterRelease() {
-		// The gesture's own pointer events must not dismiss the drawer they just
-		// opened: bits-ui debounces interact-outside (~10ms) and touch taps can
-		// produce ghost clicks well after release, so keep outside-press disabled
-		// slightly longer than one macrotask.
-		clearTimeout(releaseDismissTimeout);
-		releaseDismissTimeout = setTimeout(() => {
+		releaseGuardCleanup();
+
+		const doc = areaEl?.ownerDocument ?? document;
+
+		function restore(event?: Event) {
+			// The gesture's trailing release click is the one physical click with no
+			// `pointerdown` of its own. Ignore it and keep waiting, so it cannot
+			// dismiss the drawer it just opened, while a click-only activation
+			// (keyboard or assistive tech) still re-enables in time.
+			if (
+				event?.type === 'click' &&
+				(event as MouseEvent).detail !== 0 &&
+				!isVirtualClick(event as MouseEvent)
+			) {
+				return;
+			}
+
+			releaseGuardCleanup = noop;
+			doc.removeEventListener('pointerdown', restore, true);
+			doc.removeEventListener('click', restore, true);
 			drawer.outsidePressDisabled = false;
-		}, 300);
+		}
+
+		// The pointerup that ends a swipe-open gesture synthesizes a `click` (and
+		// touch taps can produce ghost clicks well after release). When the drag
+		// released outside the popup, that click would be treated as an outside
+		// press and immediately dismiss the drawer that was just opened. Keep
+		// outside-press dismissal disabled until the next interaction that isn't
+		// that release click: a deliberate outside press starts with a
+		// `pointerdown`, and a click-only activation (keyboard or assistive tech)
+		// is distinguishable from a physical release. This is deterministic,
+		// unlike re-enabling on a timer that can race the synthesized click and
+		// dismiss at random.
+		//
+		// `restore` runs in document capture, ahead of bits-ui's debounced
+		// interact-outside handling, so the triggering press still dismisses.
+		releaseGuardCleanup = restore;
+		doc.addEventListener('pointerdown', restore, true);
+		doc.addEventListener('click', restore, true);
 	}
 
 	function isHorizontalDismiss() {
@@ -146,6 +187,7 @@
 		popupElement.style.setProperty(DRAWER_CSS_VARS.swipeMovementX, `${movementX}px`);
 		popupElement.style.setProperty(DRAWER_CSS_VARS.swipeMovementY, `${movementY}px`);
 		popupElement.setAttribute('data-swiping', '');
+		swipePopupElement = popupElement;
 		if (popupTransition === null) {
 			popupTransition = popupElement.style.transition;
 		}
@@ -154,6 +196,7 @@
 		const backdropElement = untrack(() => drawer.backdropElement);
 		if (backdropElement) {
 			backdropElement.setAttribute('data-swiping', '');
+			swipeBackdropElement = backdropElement;
 			backdropElement.style.setProperty(DRAWER_CSS_VARS.swipeProgress, `${backdropProgress}`);
 			const frontmostHeight = untrack(() => drawer.frontmostHeight);
 			if (openProgress > 0 && frontmostHeight > 0) {
@@ -168,11 +211,12 @@
 			frontmostHeight: openProgress > 0 ? untrack(() => drawer.frontmostHeight) : 0
 		});
 		appliedSwipeStyles = true;
+		drawer.swipeAreaActive = true;
 	}
 
 	function clearSwipeStyles() {
-		const popupElement = untrack(() => drawer.popupElement);
-		if (popupElement && appliedSwipeStyles) {
+		const popupElement = swipePopupElement;
+		if (popupElement) {
 			popupElement.style.removeProperty(DRAWER_CSS_VARS.swipeMovementX);
 			popupElement.style.removeProperty(DRAWER_CSS_VARS.swipeMovementY);
 			popupElement.removeAttribute('data-swiping');
@@ -183,7 +227,7 @@
 			popupTransition = null;
 		}
 
-		const backdropElement = untrack(() => drawer.backdropElement);
+		const backdropElement = swipeBackdropElement;
 		if (backdropElement) {
 			backdropElement.removeAttribute('data-swiping');
 			backdropElement.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
@@ -192,6 +236,9 @@
 
 		drawer.provider?.visualStateStore.set({ swipeProgress: 0, frontmostHeight: 0 });
 		appliedSwipeStyles = false;
+		swipePopupElement = null;
+		swipeBackdropElement = null;
+		drawer.swipeAreaActive = false;
 	}
 
 	function openDrawer() {
@@ -280,9 +327,25 @@
 		onCancel: finishSwipeInteraction
 	});
 
-	// Clean up when the area becomes disabled mid-gesture.
+	// The flush that opens the drawer (re)mounts the popup, whose template style
+	// doesn't carry the imperative movement vars — bits-ui rewriting the style
+	// attribute would leave the popup fully open for a frame. Re-assert the
+	// gesture styles right after the popup element appears (upstream #5112).
+	$effect(() => {
+		if (!drawer.popupElement) return;
+		if (swipeActive && appliedSwipeStyles) {
+			untrack(() => applySwipeMovement());
+		}
+	});
+
+	// Clean up when the area becomes disabled mid-gesture. Re-arm the dismissal
+	// guard first: the gesture's release events are still inbound and must not
+	// dismiss the drawer, and outside-press must not stay disabled forever.
 	$effect(() => {
 		if (!enabled) {
+			if (swipeActive) {
+				untrack(() => enableDismissAfterRelease());
+			}
 			untrack(() => {
 				swipe.reset();
 				dragDelta = { x: 0, y: 0 };
@@ -295,7 +358,7 @@
 	// Always restore outside-press dismissal on unmount.
 	$effect(() => {
 		return () => {
-			clearTimeout(releaseDismissTimeout);
+			releaseGuardCleanup();
 			drawer.outsidePressDisabled = false;
 		};
 	});

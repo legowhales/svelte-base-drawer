@@ -8,18 +8,18 @@
 
 Port du composant Drawer de base-ui (React) vers Svelte 5, en utilisant bits-ui Dialog comme fondation.
 Le code source est dans `src/lib/drawer/`.
-**Référence upstream : base-ui v1.6.0** (`packages/react/src/drawer/` + `packages/react/src/utils/useSwipeDismiss.ts`).
+**Référence upstream : base-ui v1.7.0** (`packages/react/src/drawer/` + `packages/react/src/utils/useSwipeDismiss.ts`).
 
 ## Architecture
 
-- `internal/create-swipe-gesture.svelte.ts` — moteur de gestes, port fidèle de `useSwipeDismiss` v1.6.0
+- `internal/create-swipe-gesture.svelte.ts` — moteur de gestes, port fidèle de `useSwipeDismiss` v1.7.0
 - `internal/create-drawer-touch-scroll.svelte.ts` — interception touch (scroll vs swipe), port du handler natif de `DrawerViewport`
 - `internal/create-virtual-keyboard.svelte.ts` — port de `DrawerVirtualKeyboardProvider` (clavier virtuel mobile)
 - `internal/drawer-state.svelte.ts` — état du drawer, physique du release, coordination bits-ui
 - `internal/utils.ts` — utilitaires purs (scroll, shadow-DOM-aware traversal, sélection, transform)
 - `components/` — composants Svelte qui wrappent bits-ui Dialog
 
-## Anatomie (alignée base-ui v1.6.0)
+## Anatomie (alignée base-ui v1.7.0)
 
 ```
 Drawer.Root                     → contexte + bits-ui Dialog.Root
@@ -51,7 +51,43 @@ Drawer.Root                     → contexte + bits-ui Dialog.Root
 - `--drawer-keyboard-inset` : inset clavier (sur le viewport, via VirtualKeyboardProvider)
 - Attribut d'opt-out : `data-swipe-ignore` (aucun swipe ne démarre dessus)
 
-## État actuel (Phase 2 TERMINÉE — parité fonctionnelle complète avec base-ui v1.6.0)
+## État actuel (Phase 2 TERMINÉE — parité fonctionnelle complète avec base-ui v1.7.0)
+
+### Mise à jour v1.6.0 → v1.7.0 (2026-08-13)
+
+Les 6 fixes drawer applicables de la release v1.7.0 sont portés :
+
+- **#5105** swipe-to-open fiable : re-ancrage du 1er move seulement si `trackDrag`
+  (le SwipeArea passe `trackDrag: false` → un flick entier dans le 1er move compte),
+  init `sawPrimaryButtonsOnMove = !('touches' in event)`.
+- **#5308** : `syncDragStyles` seulement quand l'offset change (curseur bloqué au
+  bord d'écran → plus de saut de snap point). La fonction `swipeThreshold` est
+  snapshotée au début du geste.
+- **#5257** : arbitrage cross-axis réécrit (`shouldYieldTouchMove`) — slop 6px,
+  biais 2px, attribution one-shot par geste (`drawerAxisAttributed`),
+  non-cancelable → scroll natif, et AUCUN preventDefault tant qu'aucun axe n'a
+  passé le slop (sinon iOS tue le scroll natif pour tout le geste).
+- **#5360** Shadow DOM : `getElementAtPoint(element.getRootNode())` partout
+  (elementFromPoint du document re-cible le contenu shadow vers le host).
+- **#5112** anti-flash SwipeArea : flag `swipeAreaActive` sur le state —
+  `resetAfterOpen` saute le reset des vars de mouvement et du backdrop pendant un
+  swipe-to-open ; le SwipeArea ré-asserte ses styles quand le popup (re)mount.
+- **#5179** clavier virtuel : refonte du réalignement quand le focus bouge clavier
+  ouvert (passes 150ms×4, `preemptFocusReveal`, pin du scroll window, flag focus
+  programmatique, settle-watching 60 frames, annulation au pointerdown).
+- Guard outside-press du SwipeArea désormais **déterministe** (capture
+  `pointerdown`/`click` + `isVirtualClick`, remplace le timer 300ms).
+
+Non porté (React-only) : #5109 (remount du store), `Drawer.Handle`/`createHandle`
+(triggers détachés DialogHandle — pas d'équivalent bits-ui), réductions de bundle,
+`useIsoLayoutEffect`. Les refactors cosmétiques upstream (closestSnapPointIndex,
+etc.) n'ont pas été calqués quand le comportement est identique.
+
+Vérifié en preview (recettes HANDOFF §7) : dismiss basique, swipe-to-open avec
+pause mi-geste (les vars survivent au flip d'ouverture), guard outside-press en
+événements trusted CDP, snap expand/collapse, nested stacking. `svelte-check` 0
+erreur, `npm run package` OK. Les comportements iOS réels (#5257, #5179) restent à
+valider sur appareil.
 
 Tous les composants sont portés : Root, Trigger, Portal, Backdrop, Viewport, Popup,
 Content, Handle, Title, Description, Close, **SwipeArea**, **Provider**, **Indent**,
@@ -70,7 +106,7 @@ lib — ses sélecteurs d'attributs écraseraient les classes).
 
 ## Package npm
 
-Le projet est packagé sous le nom **`svelte-base-drawer`** (v0.1.0, nom npm
+Le projet est packagé sous le nom **`svelte-base-drawer`** (v0.1.2, nom npm
 vérifié disponible) : entrée `src/lib/index.ts` → `dist/` via
 `npm run package` (`svelte-package` + `publint`). `bits-ui` et `svelte` sont
 en **peerDependencies** (le package s'installe à côté d'un bits-ui existant).
@@ -126,8 +162,10 @@ effect_update_depth n'apparaît qu'en console). Toujours `untrack()` les appels 
   on-open depuis un effect du viewport peut re-tourner après un release et écraser le
   snap point choisi. `resetAfterOpen` doit rester idempotent et sans écriture de prop.
 - **Dismissal bits-ui débouncée** : l'interact-outside de bits-ui est différée (~10ms
-  debounce + ghost clicks touch). Le SwipeArea garde `outsidePressDisabled` 300ms après
-  le release, sinon le geste qui vient d'ouvrir le drawer le referme.
+  debounce + ghost clicks touch). Le SwipeArea garde `outsidePressDisabled` après le
+  release jusqu'à la prochaine interaction qui n'est pas le click de release du geste
+  (guard capture `pointerdown`/`click` + `isVirtualClick`, déterministe — upstream
+  v1.7.0), sinon le geste qui vient d'ouvrir le drawer le referme.
 - **Test en onglet caché** : `requestAnimationFrame` ne tourne pas dans un onglet masqué →
   le retrait de `data-starting-style` par bits-ui ne se fait jamais et le drawer semble
   bloqué à sa position d'entrée. Ce n'est PAS un bug du code — forcer des frames via

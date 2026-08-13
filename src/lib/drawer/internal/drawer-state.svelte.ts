@@ -34,7 +34,7 @@ import {
 	type SwipeDirection
 } from './utils.js';
 
-// CSS custom property names (aligned with base-ui v1.6.0)
+// CSS custom property names (aligned with base-ui v1.7.0)
 export const DRAWER_CSS_VARS = {
 	swipeMovementX: '--drawer-swipe-movement-x',
 	swipeMovementY: '--drawer-swipe-movement-y',
@@ -138,6 +138,12 @@ export class DrawerRootState {
 	 * The popup's onInteractOutside handler consults this flag.
 	 */
 	outsidePressDisabled = false;
+	/**
+	 * Whether `Drawer.SwipeArea` is currently driving an open gesture (writing
+	 * the popup's swipe-movement vars imperatively). `resetAfterOpen` reads this
+	 * to skip resetting them on open (upstream #5112).
+	 */
+	swipeAreaActive = false;
 
 	// --- Swipe state ---
 	swipeGesture: SwipeGesture;
@@ -283,7 +289,7 @@ export class DrawerRootState {
 				if (!popup) return false;
 
 				const doc = popup.ownerDocument;
-				const elementAtPoint = getElementAtPoint(doc, position.x, position.y);
+				const elementAtPoint = getElementAtPoint(popup.getRootNode(), position.x, position.y);
 				if (!elementAtPoint || !popup.contains(elementAtPoint)) return false;
 
 				const nativeEvent = details.nativeEvent;
@@ -378,8 +384,8 @@ export class DrawerRootState {
 				}
 
 				const currentTarget = event.currentTarget;
-				const doc = currentTarget instanceof HTMLElement ? currentTarget.ownerDocument : document;
-				const elementAtPoint = getElementAtPoint(doc, event.clientX, event.clientY);
+				const root = currentTarget instanceof HTMLElement ? currentTarget.getRootNode() : document;
+				const elementAtPoint = getElementAtPoint(root, event.clientX, event.clientY);
 				// Pointer (mouse/pen) swipes never start from the scrollable content
 				// region, so text can still be selected there with a mouse.
 				if (isSwipeIgnoredTarget(elementAtPoint) || isDrawerContentTarget(elementAtPoint)) {
@@ -952,15 +958,25 @@ export class DrawerRootState {
 	resetAfterOpen() {
 		this.cancelRevertFrame();
 		this.pendingSwipeCloseSnapPoint = undefined;
-		this.swipeGesture.reset();
+		// Skip the gesture and backdrop reset while `Drawer.SwipeArea` is driving
+		// the open: `swipeGesture.reset()` zeroes the popup's movement vars (via
+		// `syncDragStyles(false)`) and the backdrop write clobbers the gesture's
+		// progress, flashing the drawer fully open for a frame (upstream #5112).
+		// `clearSwipeRelease` doesn't touch those vars, so always run it to clear
+		// leftover release state from a prior dismiss.
+		if (!this.swipeAreaActive) {
+			this.swipeGesture.reset();
+		}
 		this.clearSwipeRelease();
 		this.swipeDismissed = false;
 		this.touchScroll.reset();
 
-		const backdrop = untrack(() => this.backdropElement);
-		if (backdrop) {
-			backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
-			backdrop.style.removeProperty(DRAWER_CSS_VARS.height);
+		if (!this.swipeAreaActive) {
+			const backdrop = untrack(() => this.backdropElement);
+			if (backdrop) {
+				backdrop.style.setProperty(DRAWER_CSS_VARS.swipeProgress, '0');
+				backdrop.style.removeProperty(DRAWER_CSS_VARS.height);
+			}
 		}
 	}
 

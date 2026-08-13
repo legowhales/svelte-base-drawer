@@ -1,6 +1,6 @@
 # svelte-base-drawer
 
-A Svelte 5 port of [Base UI's Drawer](https://base-ui.com/react/components/drawer) (v1.6.0), built on [bits-ui](https://bits-ui.com) Dialog.
+A Svelte 5 port of [Base UI's Drawer](https://base-ui.com/react/components/drawer) (v1.7.0), built on [bits-ui](https://bits-ui.com) Dialog.
 
 A drawer (bottom sheet) with mobile-grade gesture handling: the swipe engine, touch-scroll arbitration and release physics are a faithful port of Base UI's `useSwipeDismiss`, while focus management, portals and accessibility come from bits-ui Dialog.
 

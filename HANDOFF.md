@@ -1,4 +1,4 @@
-# HANDOFF — Drawer Svelte (port de base-ui v1.6.0)
+# HANDOFF — Drawer Svelte (port de base-ui v1.7.0)
 
 Document de passation. Tout ce qu'il faut pour reprendre le travail sans le
 contexte des sessions précédentes. À lire avec le `CLAUDE.md` (état résumé) ;
@@ -12,7 +12,7 @@ Port du composant **Drawer de base-ui** (React, `@base-ui/react`) vers
 **Svelte 5**, en utilisant **bits-ui Dialog** comme fondation (accessibilité,
 focus trap, escape, outside-press, portal, presence/transitions).
 
-**Référence upstream : base-ui v1.6.0** — fichiers sources de référence :
+**Référence upstream : base-ui v1.7.0** — fichiers sources de référence :
 
 - `packages/react/src/drawer/**` (tous les composants)
 - `packages/react/src/utils/useSwipeDismiss.ts` (moteur de gestes)
@@ -22,7 +22,7 @@ focus trap, escape, outside-press, portal, presence/transitions).
 Pour re-cloner la référence :
 
 ```bash
-git clone --depth 1 --branch v1.6.0 --filter=blob:none --sparse https://github.com/mui/base-ui.git
+git clone --depth 1 --branch v1.7.0 --filter=blob:none --sparse https://github.com/mui/base-ui.git
 cd base-ui && git sparse-checkout set packages/react/src/drawer packages/react/src/utils "docs/src/app/(docs)/react/components/drawer"
 ```
 
@@ -30,7 +30,7 @@ cd base-ui && git sparse-checkout set packages/react/src/drawer packages/react/s
 pour le mobile (gestion du clavier virtuel, arbitrage scroll/swipe natif,
 vélocités calibrées). Aucun équivalent Svelte n'existait.
 
-## 2. État : TERMINÉ à parité fonctionnelle v1.6.0
+## 2. État : TERMINÉ à parité fonctionnelle v1.7.0
 
 - **Phase 1** : moteur de swipe à parité `useSwipeDismiss` v1.6.0, anatomie
   upstream, pilotage natif du touch, dismiss synchrone, scroll lock.
@@ -46,6 +46,16 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   vélocité-scalé, expand/collapse entre snap points, stacking nested à 3
   niveaux, swipe-to-open, garde-fous (pas de swipe depuis input/zone de texte).
 - **PAS ENCORE testé sur appareil réel iOS/Android** (voir §6).
+- **Mise à jour v1.7.0 (2026-08-13)** : les 6 fixes drawer applicables de la
+  release base-ui v1.7.0 sont portés — #5105 (swipe-to-open fiable), #5308
+  (saut de snap point pointeur bloqué au bord), #5257 (arbitrage cross-axis
+  iOS sous le slop), #5360 (Shadow DOM `getRootNode`), #5112 (flash SwipeArea,
+  via `swipeAreaActive`), #5179 (refonte clavier virtuel : realign passes,
+  preempt du reveal WebKit, pin du scroll window). Le guard outside-press du
+  SwipeArea est passé du timer 300ms au guard déterministe upstream. Détail
+  dans CLAUDE.md « Mise à jour v1.6.0 → v1.7.0 ». Non porté (React-only) :
+  #5109, `Drawer.Handle`/`createHandle` détachés, réductions de bundle. Les
+  comportements iOS (#5257, #5179) restent à valider sur appareil réel.
 
 ## 3. Anatomie et API publique
 
@@ -356,8 +366,8 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   https://svelte-base-drawer.otarie.dev (custom domain, DNS+certif gérés par
   le deploy ; l'URL workers.dev est volontairement désactivée — pas de
   `workers_dev`). Redéployer : `npm run build && npx wrangler deploy`.
-- **Publication npm** : le package est prêt (`svelte-base-drawer@0.1.0`,
-  nom vérifié disponible le 2026-07-12). `npm run package` construit `dist/`
+- **Publication npm** : le package est prêt (`svelte-base-drawer`, 0.1.2 en
+  local, nom vérifié disponible le 2026-07-12). `npm run package` construit `dist/`
   (`svelte-package`) et lance `publint` ; `npm publish` déclenche tout via
   `prepack`. bits-ui et svelte sont en `peerDependencies`, `drawer.css`
   exporté sous `svelte-base-drawer/drawer.css` (rendu autonome : la var
@@ -375,7 +385,8 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   le même TODO).
 - **`Drawer.Handle` divergence de naming** : notre Handle = indicateur
   visuel ; l'upstream exporte sous ce nom le DialogHandle (triggers
-  détachés). Si la lib est publiée, trancher le naming.
+  détachés — v1.7.0 le brande même en `DrawerHandle` dédié + `createHandle`).
+  Si la lib est publiée, trancher le naming.
 - **Événements non typés "reasons"** : upstream passe des `eventDetails`
   (reason: swipe/escape/…) à onOpenChange/onSnapPointChange ; notre port ne
   les expose pas (signatures simples `(open: boolean)` /
@@ -417,10 +428,14 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   popup.dispatchEvent(ev('pointerup', x, yEnd, 0));
   ```
   Notes : le premier move est absorbé (compensation iOS re-ancre le start) —
-  prévoir la distance en conséquence ; le seuil de dismiss/open est 50 % de la
-  taille du popup ; des dispatches synchrones (sans sleep) = timeStamps
-  identiques = vélocités min/max selon le chemin (utile pour tester le
-  fast-swipe, piégeux pour le reste).
+  prévoir la distance en conséquence — SAUF pour le SwipeArea : depuis la
+  v1.7.0 (#5105) le re-ancrage n'a lieu que si `trackDrag`, et le SwipeArea
+  passe `trackDrag: false`, donc toute la distance compte ; le seuil de
+  dismiss/open est 50 % de la taille du popup ; des dispatches synchrones
+  (sans sleep) = timeStamps identiques = vélocités min/max selon le chemin
+  (utile pour tester le fast-swipe, piégeux pour le reste). Les événements
+  synthétiques (untrusted) n'activent PAS l'outside-press ni l'Escape de
+  bits-ui — utiliser de vrais inputs CDP pour tester le guard du SwipeArea.
 - **Assertions utiles** : pendant le drag → `popup.style.transform`
   (translate3d composé, sauf snap mode où il est retiré),
   `--drawer-swipe-movement-y`, `data-swiping` sur popup+backdrop,
@@ -485,3 +500,15 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
    (dont `closest()` suffit), `hasScrollableAncestor` accepte `Element`.
    Note : un vrai drag long depuis un bouton engage quand même un swipe via le
    re-attempt pending — c'est le comportement upstream, ne pas « corriger ».
+9. **Mise à jour base-ui v1.7.0 (2026-08-13)** : analyse des 208 commits de la
+   release, 8 PRs drawer identifiées, 6 applicables portées (voir §2 et
+   CLAUDE.md). Réalisé en partie par sous-agents (moteur, touch-scroll,
+   clavier virtuel — diffs relus ligne à ligne ensuite). Nouveaux morceaux :
+   `swipeAreaActive` sur le state (skip du reset à l'ouverture pilotée
+   SwipeArea), guard outside-press déterministe (`isVirtualClick` ajouté à
+   utils), effet de ré-assertion des styles SwipeArea au (re)mount du popup,
+   bookkeeping settle/commit/re-issue du scroll clavier. Vérifié en preview
+   (dismiss, swipe-to-open avec pause mi-geste, guard en events trusted,
+   snap, nested) ; `npm run check` 0 erreur, `npm run package` OK ; version
+   0.1.2. Les fixes purement iOS (#5257, #5179) restent à valider sur
+   appareil réel.

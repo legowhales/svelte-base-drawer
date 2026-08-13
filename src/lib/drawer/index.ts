@@ -3,7 +3,7 @@
  *
  * Built on top of bits-ui Dialog for accessibility (focus trap, escape,
  * click outside, ARIA) and adds mobile-grade swipe gesture handling
- * ported from base-ui v1.6.0.
+ * ported from base-ui v1.7.0.
  *
  * Anatomy (aligned with base-ui):
  * ```svelte

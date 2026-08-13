@@ -1,5 +1,5 @@
 /**
- * Snap point resolution. Port of base-ui v1.6.0 `useDrawerSnapPoints` helpers.
+ * Snap point resolution. Port of base-ui v1.7.0 `useDrawerSnapPoints` helpers.
  *
  * Snap points position the drawer at intermediate heights:
  * - numbers in (0, 1] are fractions of the viewport height
