@@ -7,5 +7,20 @@
 	"routes": [{ "pattern": "svelte-base-drawer.otarie.dev", "custom_domain": true }],
 	"assets": {
 		"directory": "./build"
+	},
+	// Environnement de test mobile : worker séparé, URL workers.dev, aucune
+	// route custom (la prod n'est pas touchée).
+	// Deploy: npm run build && npx wrangler deploy --env dev
+	"env": {
+		"dev": {
+			"name": "svelte-base-drawer-dev",
+			"workers_dev": true,
+			// IMPORTANT : routes vides EXPLICITES — sans ça l'env hérite de la
+			// route custom domain du niveau racine et VOLE le domaine de prod.
+			"routes": [],
+			"assets": {
+				"directory": "./build"
+			}
+		}
 	}
 }
