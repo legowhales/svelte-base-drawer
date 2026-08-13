@@ -4,6 +4,11 @@
 > fichiers, invariants, recettes de test (simulation de gestes, piège de
 > l'onglet caché), et liste des points restants à corriger.
 
+> 🔁 **Mise à jour de parité upstream** : skill projet `/base-ui-parity`
+> (`.claude/skills/base-ui-parity/SKILL.md`) — analyse la release base-ui,
+> classe les changements (applicables / React-only), présente un plan
+> d'action et N'IMPLÉMENTE RIEN avant validation de l'utilisateur.
+
 ## Contexte
 
 Port du composant Drawer de base-ui (React) vers Svelte 5, en utilisant bits-ui Dialog comme fondation.
