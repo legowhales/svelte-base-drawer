@@ -366,8 +366,9 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   https://svelte-base-drawer.otarie.dev (custom domain, DNS+certif gérés par
   le deploy ; l'URL workers.dev est volontairement désactivée — pas de
   `workers_dev`). Redéployer : `npm run build && npx wrangler deploy`.
-- **Publication npm** : le package est prêt (`svelte-base-drawer`, 0.1.2 en
-  local, nom vérifié disponible le 2026-07-12). `npm run package` construit `dist/`
+- **Publication npm** : le package est prêt (`svelte-base-drawer`, 0.2.0 en
+  local, nom vérifié disponible le 2026-07-12 ; convention : une montée minor
+  de base-ui = une montée minor du package). `npm run package` construit `dist/`
   (`svelte-package`) et lance `publint` ; `npm publish` déclenche tout via
   `prepack`. bits-ui et svelte sont en `peerDependencies`, `drawer.css`
   exporté sous `svelte-base-drawer/drawer.css` (rendu autonome : la var
@@ -510,5 +511,6 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
    bookkeeping settle/commit/re-issue du scroll clavier. Vérifié en preview
    (dismiss, swipe-to-open avec pause mi-geste, guard en events trusted,
    snap, nested) ; `npm run check` 0 erreur, `npm run package` OK ; version
-   0.1.2. Les fixes purement iOS (#5257, #5179) restent à valider sur
-   appareil réel.
+   0.2.0 (bumpée 0.1.2 puis re-versionnée : une montée minor de base-ui = une
+   montée minor du package). Les fixes purement iOS (#5257, #5179) restent à
+   valider sur appareil réel.
