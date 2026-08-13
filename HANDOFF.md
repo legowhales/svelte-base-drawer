@@ -366,9 +366,9 @@ vélocités calibrées). Aucun équivalent Svelte n'existait.
   https://svelte-base-drawer.otarie.dev (custom domain, DNS+certif gérés par
   le deploy ; l'URL workers.dev est volontairement désactivée — pas de
   `workers_dev`). Redéployer : `npm run build && npx wrangler deploy`.
-- **Publication npm** : le package est prêt (`svelte-base-drawer`, 0.2.0 en
-  local, nom vérifié disponible le 2026-07-12 ; convention : une montée minor
-  de base-ui = une montée minor du package). `npm run package` construit `dist/`
+- **Publication npm** : PUBLIÉ — `svelte-base-drawer@0.2.0` (2026-08-13,
+  release GitHub v0.2.0 avec changelog ; convention : une montée minor de
+  base-ui = une montée minor du package). `npm run package` construit `dist/`
   (`svelte-package`) et lance `publint` ; `npm publish` déclenche tout via
   `prepack`. bits-ui et svelte sont en `peerDependencies`, `drawer.css`
   exporté sous `svelte-base-drawer/drawer.css` (rendu autonome : la var

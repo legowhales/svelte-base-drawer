@@ -106,9 +106,9 @@ lib — ses sélecteurs d'attributs écraseraient les classes).
 
 ## Package npm
 
-Le projet est packagé sous le nom **`svelte-base-drawer`** (v0.2.0, nom npm
-vérifié disponible ; convention : une montée minor de base-ui = une montée
-minor du package — 1.6→1.7 a donné 0.1→0.2) : entrée `src/lib/index.ts` → `dist/` via
+Le projet est publié sur npm sous le nom **`svelte-base-drawer`** (v0.2.0 ;
+convention : une montée minor de base-ui = une montée minor du package —
+1.6→1.7 a donné 0.1→0.2) : entrée `src/lib/index.ts` → `dist/` via
 `npm run package` (`svelte-package` + `publint`). `bits-ui` et `svelte` sont
 en **peerDependencies** (le package s'installe à côté d'un bits-ui existant).
 Exports : `.` (composants) et `./drawer.css` (feuille de départ, autonome —
