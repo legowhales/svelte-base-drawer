@@ -23,3 +23,9 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Config Claude / docs de travail (local uniquement)
+.claude/
+.mcp.json
+CLAUDE.md
+HANDOFF.md
