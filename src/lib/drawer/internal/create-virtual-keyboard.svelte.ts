@@ -111,6 +111,16 @@ export interface VirtualKeyboardOptions {
 export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualKeyboardHooks {
 	let pendingKeyboardFocusMoved = false;
 	let keyboardTouchStart: { x: number; y: number } | null = null;
+	// Tap target (and, for contenteditable, the caret position under the
+	// finger) resolved at TOUCHSTART, while layout is at rest. By touchend the
+	// software keyboard may already be animating — WebKit shows it on touch
+	// begin for a field left focused without it — and the content has shifted
+	// under the stationary finger: a point-based resolution at touchend then
+	// hits the wrong element, and point-based caret placement lands a line off.
+	// The caret capture is content-anchored (node + offset), so it survives
+	// any scroll or viewport shift between touch begin and lift.
+	let keyboardTapTarget: KeyboardTouchTarget | typeof KEYBOARD_TAP_BLOCKED | null = null;
+	let keyboardTapCaret: { node: Node; offset: number } | null = null;
 	let focusedKeyboardTarget: HTMLElement | null = null;
 	let keyboardScrollAdjustment: ScrollAdjustment | null = null;
 	let programmaticKeyboardFocus = false;
@@ -203,6 +213,8 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 	function resetTouchTrackingState() {
 		pendingKeyboardFocusMoved = false;
 		keyboardTouchStart = null;
+		keyboardTapTarget = null;
+		keyboardTapCaret = null;
 	}
 
 	$effect(() => {
@@ -357,7 +369,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			const visibleBottom = clippedBottom - KEYBOARD_VISIBILITY_MARGIN;
 			if (visibleBottom <= visibleTop) return;
 
-			const targetRect = target.getBoundingClientRect();
+			const targetRect = getKeyboardFocusRect(target);
 			const nextScrollTop =
 				scrollTarget.scrollTop +
 				(targetRect.top + targetRect.bottom - visibleTop - visibleBottom) / 2;
@@ -577,6 +589,26 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		const touch = event.touches[0];
 		pendingKeyboardFocusMoved = false;
 		keyboardTouchStart = { x: touch.clientX, y: touch.clientY };
+		keyboardTapTarget = null;
+		keyboardTapCaret = null;
+		const rootElement = untrack(options.rootElement);
+		if (rootElement) {
+			keyboardTapTarget = resolveKeyboardTouchTargetFromPoint(
+				rootElement.getRootNode(),
+				touch.clientX,
+				touch.clientY
+			);
+			if (
+				keyboardTapTarget !== KEYBOARD_TAP_BLOCKED &&
+				keyboardTapTarget?.focusTarget.isContentEditable
+			) {
+				keyboardTapCaret = caretFromPoint(
+					keyboardTapTarget.focusTarget,
+					touch.clientX,
+					touch.clientY
+				);
+			}
+		}
 	}
 
 	function onTouchMove(event: TouchEvent) {
@@ -611,9 +643,11 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		const touch = event.changedTouches[0] ?? event.touches[0];
 		const root = rootElement.getRootNode();
 		const nativeEventTarget = getEventTarget(event);
-		const pointTarget = touch
-			? resolveKeyboardTouchTargetFromPoint(root, touch.clientX, touch.clientY)
-			: null;
+		// Prefer the touchstart-time resolution (layout at rest); re-resolve at
+		// the lift point only when the tap started outside any resolvable spot.
+		const pointTarget =
+			keyboardTapTarget ??
+			(touch ? resolveKeyboardTouchTargetFromPoint(root, touch.clientX, touch.clientY) : null);
 
 		// The lift point landed on another interactive/label element; let its
 		// native tap through instead of stealing it for the touchstart input.
@@ -666,6 +700,22 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 				focusKeyboardInputWithoutPageScroll(keyboardFocusTarget);
 			} finally {
 				programmaticKeyboardFocus = false;
+			}
+			// Contenteditable hosts: `.focus()` restores the STORED selection
+			// (document start on first focus, the previous selection afterwards) —
+			// unlike a native tap, it never places the caret at the tap point, and
+			// the redispatched click below is untrusted so the browser won't place
+			// it either. Set the DOM caret at the tap — preferring the position
+			// captured at TOUCHSTART (content-anchored, immune to the layout shift
+			// of a keyboard already animating up); editors that mirror the DOM
+			// selection (ProseMirror, Lexical, …) pick it up through
+			// `selectionchange`.
+			if (keyboardFocusTarget.isContentEditable) {
+				const caret =
+					keyboardTapCaret ?? caretFromPoint(keyboardFocusTarget, touch.clientX, touch.clientY);
+				if (caret) {
+					placeCaret(keyboardFocusTarget, caret);
+				}
 			}
 			// Preventing the touchend default also suppresses the compatibility mouse
 			// events, including `click`; redispatch an untrusted replacement on the
@@ -729,6 +779,81 @@ function resolveKeyboardTouchTarget(target: EventTarget | null): KeyboardTouchTa
 		focusTarget,
 		clickTarget: target
 	};
+}
+
+// A contenteditable host can span several screens (a rich-text editor):
+// centering the HOST scrolls to its midpoint regardless of where the caret
+// sits. Align on the caret/selection rect instead (last rect = the focus end,
+// where typing happens), falling back to the host rect when the selection is
+// absent, outside the host, or reports no usable rect (collapsed caret at an
+// element boundary).
+function getKeyboardFocusRect(target: HTMLElement): DOMRect {
+	if (!target.isContentEditable) {
+		return target.getBoundingClientRect();
+	}
+	const selection = target.ownerDocument.getSelection();
+	if (!selection || selection.rangeCount === 0) {
+		return target.getBoundingClientRect();
+	}
+	const range = selection.getRangeAt(0);
+	if (!target.contains(range.startContainer)) {
+		return target.getBoundingClientRect();
+	}
+	const rects = range.getClientRects();
+	const rect = rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
+	if (rect.top === 0 && rect.bottom === 0 && rect.left === 0 && rect.right === 0) {
+		return target.getBoundingClientRect();
+	}
+	return rect as DOMRect;
+}
+
+// Resolves the caret position of a contenteditable host at the given viewport
+// point, through the standard `caretPositionFromPoint` with the WebKit
+// `caretRangeFromPoint` fallback. A resolved point outside the host (padding,
+// margin overlap) is dropped rather than clamped — the tap-to-focus caller
+// only reaches this for taps resolved to the host.
+function caretFromPoint(
+	host: HTMLElement,
+	clientX: number,
+	clientY: number
+): { node: Node; offset: number } | null {
+	const doc = host.ownerDocument as Document & {
+		caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+		caretRangeFromPoint?: (x: number, y: number) => Range | null;
+	};
+	let node: Node | null = null;
+	let offset = 0;
+	if (typeof doc.caretPositionFromPoint === 'function') {
+		const position = doc.caretPositionFromPoint(clientX, clientY);
+		if (position) {
+			node = position.offsetNode;
+			offset = position.offset;
+		}
+	} else if (typeof doc.caretRangeFromPoint === 'function') {
+		const range = doc.caretRangeFromPoint(clientX, clientY);
+		if (range) {
+			node = range.startContainer;
+			offset = range.startOffset;
+		}
+	}
+	if (!node || !host.contains(node)) return null;
+	return { node, offset };
+}
+
+// Collapses the DOM selection at a captured caret position. Re-checks that the
+// node still belongs to the host — the content may have changed between the
+// touchstart capture and the lift.
+function placeCaret(host: HTMLElement, caret: { node: Node; offset: number }): void {
+	if (!caret.node.isConnected || !host.contains(caret.node)) return;
+	const offset = Math.min(
+		caret.offset,
+		caret.node.nodeType === Node.TEXT_NODE
+			? (caret.node.textContent?.length ?? 0)
+			: caret.node.childNodes.length
+	);
+	host.ownerDocument.defaultView
+		?.getSelection()
+		?.setBaseAndExtent(caret.node, offset, caret.node, offset);
 }
 
 // Inherited-editable descendants (no `contenteditable` attribute of their own)
