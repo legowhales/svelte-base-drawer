@@ -144,6 +144,17 @@ export class DrawerRootState {
 	 * to skip resetting them on open (upstream #5112).
 	 */
 	swipeAreaActive = false;
+	/**
+	 * Registered by Drawer.Popup: the outside-press guard chain (SwipeArea guard
+	 * + consumer onInteractOutside). Returns whether the drawer may close.
+	 * Shared by the bits-ui dismissible layer and the viewport's touch
+	 * outside-press path so a given press is only processed once.
+	 */
+	popupOutsidePressChain: ((event: Event) => boolean) | null = null;
+
+	// Touch outside-press tracking (see the "Outside press" section below).
+	private pendingOutsideTouchPress = false;
+	private outsidePressPointerType = '';
 
 	// --- Swipe state ---
 	swipeGesture: SwipeGesture;
@@ -411,6 +422,125 @@ export class DrawerRootState {
 			},
 			...this.touchScroll.handlers
 		};
+	}
+
+	// --- Outside press (touch) ---
+	//
+	// bits-ui's touch outside-press dismissal arms a one-shot document `click`
+	// listener from a 10ms-debounced pointerdown handler. During a touch gesture
+	// Chrome defers timer tasks (input-gesture scheduling), so on Android the
+	// listener regularly arms only AFTER the tap's click has fired: the first
+	// outside tap arms the (now stale) listener, and only the second tap closes
+	// the drawer. The drawer claims touch outside presses deterministically
+	// instead, with synchronous document listeners: record the press on
+	// touchstart, dismiss on the same tap's click (the browser only synthesizes
+	// a click for an actual tap, so scrolls and swipes never dismiss, and by
+	// click time the press can no longer turn into a gesture). Mouse/pen
+	// presses keep going through bits-ui's immediate, non-click-based path.
+	// `popupOutsidePressChain` dedupes per event, so when bits-ui's listener
+	// does win its race the press is still only handled once.
+
+	/**
+	 * Attach the outside-press document listeners. Called from the viewport's
+	 * mount effect — returns the cleanup function.
+	 */
+	setupOutsidePressListeners(doc: Document) {
+		const onPointerDown = (event: PointerEvent) => {
+			this.outsidePressPointerType = event.pointerType;
+		};
+		const onTouchStart = (event: TouchEvent) => {
+			this.trackOutsideTouchPress(event);
+		};
+		const onTouchCancel = () => {
+			this.pendingOutsideTouchPress = false;
+		};
+		const onClick = (event: MouseEvent) => {
+			this.handleOutsidePressClick(event);
+		};
+
+		doc.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
+		doc.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+		doc.addEventListener('touchcancel', onTouchCancel, { capture: true, passive: true });
+		doc.addEventListener('click', onClick);
+		return () => {
+			this.pendingOutsideTouchPress = false;
+			doc.removeEventListener('pointerdown', onPointerDown, { capture: true });
+			doc.removeEventListener('touchstart', onTouchStart, { capture: true });
+			doc.removeEventListener('touchcancel', onTouchCancel, { capture: true });
+			doc.removeEventListener('click', onClick);
+		};
+	}
+
+	private trackOutsideTouchPress(event: TouchEvent) {
+		this.pendingOutsideTouchPress = false;
+
+		if (!untrack(() => this.opts.open.current)) return;
+		if (untrack(() => this.nestedOpenDrawerCount) > 0) return;
+		if (event.touches.length !== 1) return;
+		// Pen-initiated touch sequences dismiss through bits-ui's immediate
+		// (pointerType !== 'touch') path already.
+		if (this.outsidePressPointerType === 'pen') return;
+		if (this.swipeGesture.swiping) return;
+
+		const popup = untrack(() => this.popupElement);
+		const touch = event.touches[0];
+		if (!popup || !touch) return;
+
+		const elementAtPoint = getElementAtPoint(popup.getRootNode(), touch.clientX, touch.clientY);
+		if (!elementAtPoint || popup.contains(elementAtPoint)) return;
+		if (!this.isResponsibleDismissibleLayer()) return;
+
+		this.pendingOutsideTouchPress = true;
+	}
+
+	private handleOutsidePressClick(event: MouseEvent) {
+		if (!this.pendingOutsideTouchPress) return;
+		this.pendingOutsideTouchPress = false;
+
+		if (event.button !== 0) return;
+		if (!untrack(() => this.opts.open.current)) return;
+
+		const popup = untrack(() => this.popupElement);
+		if (!popup) return;
+		// The finger may have drifted onto the popup between press and lift.
+		const elementAtPoint = getElementAtPoint(popup.getRootNode(), event.clientX, event.clientY);
+		if (elementAtPoint && popup.contains(elementAtPoint)) return;
+
+		const chain = this.popupOutsidePressChain;
+		const shouldClose = chain ? chain(event) : true;
+		if (!shouldClose) return;
+
+		this.opts.open.current = false;
+	}
+
+	/**
+	 * Mirror of bits-ui's `isResponsibleLayer`: when a floating layer opened
+	 * from the drawer (select, popover…) is on top, the outside press belongs
+	 * to it, not to the drawer. Reads bits-ui's global layer registry — the
+	 * same source its own outside-press responsibility check uses.
+	 */
+	private isResponsibleDismissibleLayer(): boolean {
+		try {
+			const layers = (
+				globalThis as {
+					bitsDismissableLayers?: Map<
+						{ opts: { ref: { current: HTMLElement | null } } },
+						{ current: string }
+					>;
+				}
+			).bitsDismissableLayers;
+			if (!layers || layers.size === 0) return true;
+
+			const popup = untrack(() => this.popupElement);
+			const entries = [...layers];
+			const topMost = entries.findLast(
+				([, behavior]) => behavior.current === 'close' || behavior.current === 'ignore'
+			);
+			const responsible = topMost ?? entries[0];
+			return responsible?.[0]?.opts?.ref?.current === popup;
+		} catch {
+			return true;
+		}
 	}
 
 	// --- Swipe progress ---

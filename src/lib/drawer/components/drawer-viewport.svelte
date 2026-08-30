@@ -43,6 +43,15 @@
 		return drawer.touchScroll.setupNativeTouchMoveListener(root);
 	});
 
+	// Deterministic touch outside-press dismissal (document-level: the viewport
+	// may be scoped to a container via a custom portal target, so outside taps
+	// don't necessarily land inside it). See drawer-state "Outside press".
+	$effect(() => {
+		const root = viewportEl ?? drawer.popupElement;
+		if (!root) return;
+		return drawer.setupOutsidePressListeners(root.ownerDocument);
+	});
+
 	// Reset swipe state whenever the drawer opens.
 	$effect(() => {
 		if (drawer.isOpen) {

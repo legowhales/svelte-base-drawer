@@ -36,14 +36,39 @@
 	let popupEl = $state<HTMLElement | null>(null);
 	let previouslyFocusedElement: HTMLElement | null = null;
 
-	// Cancel outside-press dismissal while a SwipeArea gesture is in flight.
-	const handleInteractOutside = (event: PointerEvent) => {
-		if (drawer.outsidePressDisabled) {
-			event.preventDefault();
-			return;
-		}
-		onInteractOutside?.(event);
+	// Single outside-press guard chain, shared by bits-ui's dismissible layer
+	// and the viewport's deterministic touch path (see drawer-state "Outside
+	// press"). Returns whether the drawer may close. Both paths can observe the
+	// same tap's click on Android, so the chain runs at most once per event —
+	// the second caller is told not to act.
+	let lastOutsidePressEvent: Event | null = null;
+	const runOutsidePressChain = (event: Event): boolean => {
+		if (event === lastOutsidePressEvent) return false;
+		lastOutsidePressEvent = event;
+
+		// Cancel outside-press dismissal while a SwipeArea gesture is in flight.
+		if (drawer.outsidePressDisabled) return false;
+
+		// Only a preventDefault issued BY the consumer vetoes the close (an
+		// event already prevented upstream still dismisses, like bits-ui's
+		// wrapped-event handling).
+		const preventedBefore = event.defaultPrevented;
+		onInteractOutside?.(event as PointerEvent);
+		return preventedBefore || !event.defaultPrevented;
 	};
+
+	const handleInteractOutside = (event: PointerEvent) => {
+		if (!runOutsidePressChain(event)) {
+			event.preventDefault();
+		}
+	};
+
+	$effect(() => {
+		drawer.popupOutsidePressChain = runOutsidePressChain;
+		return () => {
+			drawer.popupOutsidePressChain = null;
+		};
+	});
 
 	// bits-ui's default auto-focus calls .focus() without preventScroll, which
 	// scrolls any scrollable/overflow-hidden ancestor to reveal the target while
