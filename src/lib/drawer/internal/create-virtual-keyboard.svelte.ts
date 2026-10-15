@@ -13,6 +13,9 @@
  *   when focus happens synchronously inside the touch gesture, so taps on
  *   keyboard inputs are committed on touchend with a synchronous focus (with an
  *   off-screen trick to suppress iOS page scrolling) and a redispatched click.
+ * - (Local, no upstream equivalent) Taps on a control inside an unfocused
+ *   contenteditable host (a NodeView button, a task-list checkbox) don't focus
+ *   the host natively: see `suppressEditingHostFocus`.
  */
 import { untrack } from 'svelte';
 import { Context } from 'runed';
@@ -53,6 +56,11 @@ const KEYBOARD_INPUT_TYPES = new Set([
 	'url'
 ]);
 const INTERACTIVE_TAP_SELECTOR = 'button,a,input,select,textarea,label,[role="button"]';
+// Controls whose tap only needs its click (no focus of its own on iOS), so the
+// editing host they sit in may be kept from taking focus. Selects and other
+// inputs open their picker on focus and are left alone.
+const EDITING_HOST_CONTROL_SELECTOR =
+	'button,a,label,[role="button"],input[type="checkbox"],input[type="radio"],input[type="button"],input[type="submit"],input[type="reset"]';
 
 // Snapshot of a scroll container's relevant styles taken before keyboard slack
 // is applied. The string fields are the exact inline values to restore on
@@ -120,6 +128,9 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 	// any scroll or viewport shift between touch begin and lift.
 	let keyboardTapTarget: KeyboardTouchTarget | typeof KEYBOARD_TAP_BLOCKED | null = null;
 	let keyboardTapCaret: { node: Node; offset: number } | null = null;
+	// The interactive control under a blocked tap, resolved with the tap target.
+	let keyboardTapBlockedControl: Element | null = null;
+	let disarmEditingHostFocusSuppression: (() => void) | null = null;
 	let focusedKeyboardTarget: HTMLElement | null = null;
 	let keyboardScrollAdjustment: ScrollAdjustment | null = null;
 	let programmaticKeyboardFocus = false;
@@ -221,6 +232,44 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		keyboardTouchStart = null;
 		keyboardTapTarget = null;
 		keyboardTapCaret = null;
+		keyboardTapBlockedControl = null;
+	}
+
+	// A tap on a control inside a contenteditable host that doesn't have focus
+	// (a NodeView delete button, a task-list checkbox): iOS doesn't focus the
+	// control itself, so the tap's compatibility mousedown focuses the nearest
+	// focusable ancestor — the editing host. That native focus carries no
+	// preventScroll: the keyboard opens and WebKit's reveal scrolls the page
+	// instead of the drawer content, for a tap that only meant to press the
+	// control. Cancel that one mousedown (its default action is the focus
+	// change); the control's click still fires natively. Disarmed by the next
+	// touchstart, or when the drawer closes.
+	function suppressEditingHostFocus(control: Element, rootElement: HTMLElement) {
+		if (!control.matches(EDITING_HOST_CONTROL_SELECTOR)) return;
+
+		const editingHost = findEditingHost(control);
+		if (
+			!editingHost ||
+			!rootElement.contains(editingHost) ||
+			editingHost.ownerDocument.activeElement === editingHost
+		) {
+			return;
+		}
+
+		const doc = control.ownerDocument;
+		const handleMouseDown = (event: MouseEvent) => {
+			disarm();
+			if (event.composedPath().includes(control)) {
+				event.preventDefault();
+			}
+		};
+		const disarm = () => {
+			doc.removeEventListener('mousedown', handleMouseDown, true);
+			disarmEditingHostFocusSuppression = null;
+		};
+
+		doc.addEventListener('mousedown', handleMouseDown, true);
+		disarmEditingHostFocusSuppression = disarm;
 	}
 
 	$effect(() => {
@@ -643,6 +692,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		return () => {
 			cleanups.forEach((cleanup) => cleanup());
 			consumePreemptedFocus();
+			disarmEditingHostFocusSuppression?.();
 			focusedKeyboardTarget = null;
 			restoreKeyboardScrollAdjustment();
 			keyboardFocusFrame.cancel();
@@ -660,21 +710,19 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 	// here (parity with upstream, whose viewport caller guards identically).
 	function onTouchStart(event: TouchEvent) {
 		const touch = event.touches[0];
+		disarmEditingHostFocusSuppression?.();
 		pendingKeyboardFocusMoved = false;
 		keyboardTouchStart = { x: touch.clientX, y: touch.clientY };
 		keyboardTapTarget = null;
 		keyboardTapCaret = null;
+		keyboardTapBlockedControl = null;
 		const rootElement = untrack(options.rootElement);
 		if (rootElement) {
-			keyboardTapTarget = resolveKeyboardTouchTargetFromPoint(
-				rootElement.getRootNode(),
-				touch.clientX,
-				touch.clientY
-			);
-			if (
-				keyboardTapTarget !== KEYBOARD_TAP_BLOCKED &&
-				keyboardTapTarget?.focusTarget.isContentEditable
-			) {
+			const root = rootElement.getRootNode();
+			keyboardTapTarget = resolveKeyboardTouchTargetFromPoint(root, touch.clientX, touch.clientY);
+			if (keyboardTapTarget === KEYBOARD_TAP_BLOCKED) {
+				keyboardTapBlockedControl = getTapControl(root, touch.clientX, touch.clientY);
+			} else if (keyboardTapTarget?.focusTarget.isContentEditable) {
 				keyboardTapCaret = caretFromPoint(
 					keyboardTapTarget.focusTarget,
 					touch.clientX,
@@ -725,6 +773,15 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		// The lift point landed on another interactive/label element; let its
 		// native tap through instead of stealing it for the touchstart input.
 		if (pointTarget === KEYBOARD_TAP_BLOCKED) {
+			const control =
+				keyboardTapTarget === KEYBOARD_TAP_BLOCKED
+					? keyboardTapBlockedControl
+					: touch
+						? getTapControl(root, touch.clientX, touch.clientY)
+						: null;
+			if (control) {
+				suppressEditingHostFocus(control, rootElement);
+			}
 			resetTouchTrackingState();
 			return;
 		}
@@ -996,6 +1053,23 @@ function resolveKeyboardTouchTargetFromPoint(
 		}
 	}
 
+	return null;
+}
+
+function getTapControl(root: Node, clientX: number, clientY: number): Element | null {
+	return closest(getElementAtPoint(root, clientX, clientY), INTERACTIVE_TAP_SELECTOR);
+}
+
+// The contenteditable host a non-editable control (e.g. inside a
+// `contenteditable="false"` NodeView) sits in, if any.
+function findEditingHost(control: Element): HTMLElement | null {
+	let node = getParentNode(control);
+	while (node) {
+		if (isHTMLElement(node) && node.isContentEditable) {
+			return getContentEditableHost(node);
+		}
+		node = getParentNode(node);
+	}
 	return null;
 }
 
