@@ -34,7 +34,7 @@ import {
 	type SwipeDirection
 } from './utils.js';
 
-// CSS custom property names (aligned with base-ui v1.7.0)
+// CSS custom property names (aligned with base-ui v1.9.0)
 export const DRAWER_CSS_VARS = {
 	swipeMovementX: '--drawer-swipe-movement-x',
 	swipeMovementY: '--drawer-swipe-movement-y',
@@ -299,17 +299,29 @@ export class DrawerRootState {
 				const popup = untrack(() => this.popupElement);
 				if (!popup) return false;
 
-				const doc = popup.ownerDocument;
-				const elementAtPoint = getElementAtPoint(popup.getRootNode(), position.x, position.y);
-				if (!elementAtPoint || !popup.contains(elementAtPoint)) return false;
-
 				const nativeEvent = details.nativeEvent;
 				const touchLike =
 					'touches' in nativeEvent ||
 					('pointerType' in nativeEvent && nativeEvent.pointerType === 'touch');
+				const touchState = touchLike ? this.touchScroll.state : null;
+
+				const doc = popup.ownerDocument;
+				const elementAtPoint = getElementAtPoint(popup.getRootNode(), position.x, position.y);
+				// Activation can be deferred until after a touch that started inside has left the popup.
+				if (!touchState?.startedInPopup && !(elementAtPoint && popup.contains(elementAtPoint))) {
+					return false;
+				}
+
 				if (touchLike && shouldIgnoreSwipeForTextSelection(doc, popup)) return false;
 
-				if (nativeEvent.type === 'touchstart' && isSwipeIgnoredTarget(elementAtPoint)) {
+				// Over a cross-axis gesture target, stay pending until the drawer axis wins the
+				// gesture. Starting on touchstart would leave the drawer swiping (and settling on
+				// release) while the cross-axis target handles the drag.
+				if (
+					touchState?.hasCrossAxisGestureTarget &&
+					!touchState.drawerAxisAttributed &&
+					touchState.allowSwipe !== true
+				) {
 					return false;
 				}
 
@@ -362,6 +374,7 @@ export class DrawerRootState {
 
 		this.touchScroll = createDrawerTouchScroll({
 			rootElement: () => this.viewportElement ?? this.popupElement,
+			popupElement: () => this.popupElement,
 			active: () => this.opts.open.current && this.nestedOpenDrawerCount === 0,
 			swipeDirection: () => this.swipeDirection,
 			swipeGesture: this.swipeGesture,
@@ -546,21 +559,18 @@ export class DrawerRootState {
 	// --- Swipe progress ---
 
 	private handleSwipeProgress(progress: number, details?: SwipeProgressDetails) {
-		this.updateNestedSwipeActive(details);
+		const swiping = untrack(() => this.swipeGesture.swiping);
 
-		const hasSnapPoints = this.hasSnapPoints;
+		if (swiping) {
+			this.updateNestedSwipeActive(details);
+		}
+
 		const direction = untrack(() => this.swipeDirection);
 
 		// Snap point mode (down): the popup is positioned entirely via CSS
 		// (snap offset + movement var); override the engine's inline transform
 		// and apply overshoot damping past the fully-open edge.
-		if (
-			this.swipeGesture.swiping &&
-			direction === 'down' &&
-			hasSnapPoints &&
-			details &&
-			Number.isFinite(details.deltaY)
-		) {
+		if (swiping && direction === 'down' && this.hasSnapPoints && details) {
 			const popup = untrack(() => this.popupElement);
 			if (popup) {
 				popup.style.removeProperty('transform');
@@ -571,46 +581,34 @@ export class DrawerRootState {
 			}
 		}
 
-		const currentDirection = details?.direction ?? this.swipeGesture.swipeDirection;
-		const isDismissSwipe = currentDirection === undefined || currentDirection === direction;
-		const isVerticalSwipe = direction === 'down' || direction === 'up';
-		const shouldTrackProgress =
-			(hasSnapPoints && isVerticalSwipe) ||
-			!hasSnapPoints ||
-			direction === 'left' ||
-			direction === 'right' ||
-			isDismissSwipe;
-
 		// With snap points, express the progress relative to the range between
 		// the two lowest snap positions so the backdrop fade tracks snapping.
 		let resolvedProgress = progress;
 		const snapPointRange = untrack(() => this.snapPointRange);
 		const popupHeight = untrack(() => this.popupHeight);
 		if (snapPointRange && popupHeight > 0) {
-			if (details && Number.isFinite(details.deltaY)) {
-				const baseOffset = untrack(() => this.activeSnapPointOffset) ?? snapPointRange.minOffset;
-				const nextOffset = clamp(baseOffset + details.deltaY, 0, popupHeight);
-				resolvedProgress = clamp(
-					(nextOffset - snapPointRange.minOffset) / snapPointRange.range,
-					0,
-					1
-				);
-			} else if (untrack(() => this.snapPointProgress) !== null) {
-				resolvedProgress = untrack(() => this.snapPointProgress)!;
-			} else if (currentDirection === 'down' || currentDirection === 'up') {
-				const displacement = progress * popupHeight;
-				const baseOffset = untrack(() => this.activeSnapPointOffset) ?? snapPointRange.minOffset;
-				const nextOffset =
-					currentDirection === 'down' ? baseOffset + displacement : baseOffset - displacement;
-				resolvedProgress = clamp(
-					(nextOffset - snapPointRange.minOffset) / snapPointRange.range,
-					0,
-					1
-				);
+			const baseOffset = untrack(() => this.activeSnapPointOffset) ?? snapPointRange.minOffset;
+			const offsetToProgress = (nextOffset: number) =>
+				clamp((nextOffset - snapPointRange.minOffset) / snapPointRange.range, 0, 1);
+			const snapPointProgress = untrack(() => this.snapPointProgress);
+
+			// Outside a drag the engine still reports the last drag deltas, both after a release and
+			// on a gesture that never started (e.g. a press inside `Drawer.Content`). Recomputing
+			// from them would re-apply drag progress to a drawer that rests on its snap point.
+			if (swiping && details && Number.isFinite(details.deltaY)) {
+				resolvedProgress = offsetToProgress(clamp(baseOffset + details.deltaY, 0, popupHeight));
+			} else if (snapPointProgress !== null) {
+				resolvedProgress = snapPointProgress;
 			}
 		}
 
-		this.applySwipeProgress(resolvedProgress, shouldTrackProgress, true);
+		// A parent drawer follows an active drag only, so drop it back to zero once the drag ends.
+		if (!swiping) {
+			this.parent?.onNestedSwipeProgressChange(0);
+			this.finishNestedSwipe();
+		}
+
+		this.applySwipeProgress(resolvedProgress, true, swiping);
 	}
 
 	applySwipeProgress(resolvedProgress: number, shouldTrackProgress: boolean, notifyParent = false) {
@@ -819,13 +817,38 @@ export class DrawerRootState {
 			? dragTargetOffset
 			: clamp(dragTargetOffset + velocityOffset, 0, popupHeight);
 
-		const closeFromSnapPoints = () => {
+		const settleInPlace = () => {
+			// Reset nested swipe state now: the engine's trailing progress update is deduped
+			// when the drag never produced dismissal progress, so it may not fire.
+			this.applySwipeProgress(0, true, true);
+			this.clearSwipeRelease();
+			return false;
+		};
+
+		const settleOnSnapPoint = (snapPoint: ResolvedDrawerSnapPoint) => {
+			this.setActiveSnapPoint(snapPoint.value);
+			return settleInPlace();
+		};
+
+		const closeFromSnapPoints = (fallbackSnapPoint: ResolvedDrawerSnapPoint) => {
+			// An unattributed gesture (e.g. a mostly horizontal flick) may settle on a snap
+			// point but must not dismiss: the engine drops a directionless dismissal,
+			// stranding the popup visually closed while `open` stays `true`.
+			if (!info.direction) {
+				return settleOnSnapPoint(fallbackSnapPoint);
+			}
+			const previousSnapPoint = untrack(() => this.activeSnapPoint);
+			this.setActiveSnapPoint(null);
+			if (untrack(() => this.activeSnapPoint) !== null) {
+				// The consumer rejected the null snap point (e.g. a function binding that ignores
+				// it): reject the dismissal before exit styles start. Upstream's equivalent is
+				// `eventDetails.cancel()` in `onSnapPointChange`.
+				return settleInPlace();
+			}
 			// Capture the base offset before clearing the snap point so the release
 			// scalar accounts for the distance already travelled.
-			this.pendingSwipeCloseSnapPoint = untrack(() => this.activeSnapPoint);
-			const snapBaseOffset = currentOffset;
-			this.setActiveSnapPoint(null);
-			this.startSwipeRelease(direction, info, snapBaseOffset);
+			this.pendingSwipeCloseSnapPoint = previousSnapPoint;
+			this.startSwipeRelease(direction, info, currentOffset);
 			return true;
 		};
 
@@ -879,7 +902,7 @@ export class DrawerRootState {
 						effectiveTargetOffset = adjacentPoint.offset;
 					}
 				} else if (dragDirection > 0) {
-					return closeFromSnapPoints();
+					return closeFromSnapPoints(targetSnapPoint);
 				}
 			}
 
@@ -887,16 +910,10 @@ export class DrawerRootState {
 			const closeDistance = Math.abs(effectiveTargetOffset - closeOffset);
 			const snapDistance = Math.abs(effectiveTargetOffset - targetSnapPoint.offset);
 			if (closeDistance < snapDistance) {
-				return closeFromSnapPoints();
+				return closeFromSnapPoints(targetSnapPoint);
 			}
 
-			this.setActiveSnapPoint(targetSnapPoint.value);
-			this.clearSwipeRelease();
-			return false;
-		}
-
-		if (resolvedDirectionalVelocity >= FAST_SWIPE_VELOCITY && dragDelta > 0) {
-			return closeFromSnapPoints();
+			return settleOnSnapPoint(targetSnapPoint);
 		}
 
 		let closestSnapPoint = resolvedSnapPoints[0];
@@ -909,15 +926,17 @@ export class DrawerRootState {
 			}
 		}
 
+		if (resolvedDirectionalVelocity >= FAST_SWIPE_VELOCITY && dragDelta > 0) {
+			return closeFromSnapPoints(closestSnapPoint);
+		}
+
 		const closeOffset = popupHeight;
 		const closeDistance = Math.abs(targetOffset - closeOffset);
 		if (closeDistance < closestDistance) {
-			return closeFromSnapPoints();
+			return closeFromSnapPoints(closestSnapPoint);
 		}
 
-		this.setActiveSnapPoint(closestSnapPoint.value);
-		this.clearSwipeRelease();
-		return false;
+		return settleOnSnapPoint(closestSnapPoint);
 	}
 
 	/**

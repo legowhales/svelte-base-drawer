@@ -1,6 +1,6 @@
 /**
  * Core swipe gesture engine.
- * Faithful port of base-ui v1.7.0 `useSwipeDismiss` adapted to Svelte 5.
+ * Faithful port of base-ui v1.9.0 `useSwipeDismiss` adapted to Svelte 5.
  *
  * Key behaviors (mirroring upstream):
  * - The swipe starts immediately on pointerdown/touchstart when allowed; when the
@@ -20,15 +20,16 @@
 import { untrack } from 'svelte';
 import {
 	clamp,
+	closest,
 	getDisplacement,
 	getDragTransform,
 	getElementAtPoint,
 	getElementTransform,
 	getEventTarget,
 	getValidTimeStamp,
+	findScrollableAncestor,
 	findScrollableTouchTarget,
 	hasPrimaryMouseButton,
-	hasScrollableAncestor,
 	isHTMLElement,
 	safelyChangePointerCapture,
 	type ScrollAxis,
@@ -37,10 +38,11 @@ import {
 
 const DEFAULT_SWIPE_THRESHOLD = 40;
 const REVERSE_CANCEL_THRESHOLD = 10;
-const MIN_DRAG_THRESHOLD = 1;
 const MIN_VELOCITY_DURATION_MS = 50;
-const MIN_RELEASE_VELOCITY_DURATION_MS = 16;
+// Under one frame at 240 Hz, so it only damps near-simultaneous samples.
+const MIN_RELEASE_VELOCITY_DURATION_MS = 4;
 const MAX_RELEASE_VELOCITY_AGE_MS = 80;
+const MIN_VELOCITY_SAMPLE_DISTANCE = 1;
 const DEFAULT_IGNORE_SELECTOR = 'button,a,input,select,textarea,label,[role="button"]';
 
 export interface SwipeProgressDetails {
@@ -131,7 +133,6 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	let cancelledSwipe = false;
 	// Client-coordinate baseline, re-anchored whenever the movement reverses.
 	let swipeCancelBaseline = { x: 0, y: 0 };
-	let lockedDirection: 'horizontal' | 'vertical' | null = null;
 	let isFirstPointerMove = false;
 	let pendingSwipe = false;
 	let pendingSwipeStartPos: { x: number; y: number } | null = null;
@@ -145,6 +146,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		| null = null;
 	let swipeStartTime: number | null = null;
 	let lastDragSample: DragSample | null = null;
+	let hasStationarySample = false;
 	let lastDragVelocity = { x: 0, y: 0 };
 	let lastProgressDetails: SwipeProgressDetails | null = null;
 	let isSwipingInternal = false;
@@ -159,6 +161,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	}
 
 	// Direction booleans, resolved per call since `directions` is reactive.
+	// Consumers only pass directions on a single axis.
 	function getDirectionState() {
 		const directions = untrack(options.directions);
 		const allowLeft = directions.includes('left');
@@ -167,9 +170,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		const allowDown = directions.includes('down');
 		const hasHorizontal = allowLeft || allowRight;
 		const hasVertical = allowUp || allowDown;
-		const scrollAxes: ScrollAxis[] = [];
-		if (hasVertical) scrollAxes.push('vertical');
-		if (hasHorizontal) scrollAxes.push('horizontal');
+		const scrollAxis: ScrollAxis = hasHorizontal ? 'horizontal' : 'vertical';
 		return {
 			directions,
 			allowLeft,
@@ -178,7 +179,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			allowDown,
 			hasHorizontal,
 			hasVertical,
-			scrollAxes,
+			scrollAxis,
 			primaryDirection: directions.length === 1 ? directions[0] : undefined
 		};
 	}
@@ -268,6 +269,18 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 
 		const last = lastDragSample;
 		if (last && timeStamp > last.time) {
+			// Some Android devices emit one effectively stationary move immediately before release.
+			// Keep the last moving sample and its timestamp. Repeated stationary moves still clear
+			// the velocity, and a release after a hold still expires the last moving sample.
+			const stationary =
+				Math.abs(offset.x - last.x) < MIN_VELOCITY_SAMPLE_DISTANCE &&
+				Math.abs(offset.y - last.y) < MIN_VELOCITY_SAMPLE_DISTANCE;
+			const skipSample = stationary && !hasStationarySample;
+			hasStationarySample = stationary;
+			if (skipSample) {
+				return;
+			}
+
 			const durationMs = Math.max(timeStamp - last.time, MIN_RELEASE_VELOCITY_DURATION_MS);
 			lastDragVelocity = {
 				x: (offset.x - last.x) / durationMs,
@@ -293,7 +306,6 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		maxSwipeDisplacement = 0;
 		cancelledSwipe = false;
 		swipeCancelBaseline = { x: 0, y: 0 };
-		lockedDirection = null;
 		isFirstPointerMove = false;
 		lastMovePos = null;
 		pendingSwipe = false;
@@ -303,6 +315,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		elementSize = { width: 0, height: 0 };
 		swipeStartTime = null;
 		lastDragSample = null;
+		hasStationarySample = false;
 		lastDragVelocity = { x: 0, y: 0 };
 		lastProgressDetails = null;
 		syncDragStyles(false);
@@ -340,18 +353,14 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		target: EventTarget | null,
 		root: HTMLElement
 	): HTMLElement | null {
-		const { hasHorizontal, hasVertical } = getDirectionState();
-
-		if (hasHorizontal && !hasVertical) {
-			return findScrollableTouchTarget(target, root, 'horizontal');
-		}
-		if (hasVertical && !hasHorizontal) {
-			return findScrollableTouchTarget(target, root, 'vertical');
-		}
-		return (
-			findScrollableTouchTarget(target, root, 'vertical') ??
-			findScrollableTouchTarget(target, root, 'horizontal')
-		);
+		// The swiped element is positioned relative to the viewport, so the page scroller must not
+		// gate the gesture (a reset like `html, body { height: 100%; overflow: auto }` makes `body`
+		// a real scroll container). The drawer viewport's native touchmove handler already ignores it.
+		const scrollTarget = findScrollableTouchTarget(target, root, getDirectionState().scrollAxis);
+		const doc = scrollTarget?.ownerDocument;
+		return scrollTarget === doc?.body || scrollTarget === doc?.documentElement
+			? null
+			: scrollTarget;
 	}
 
 	// --- Start ---
@@ -367,7 +376,7 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		swipeFromScrollable = false;
 		const touchLike = isTouchLikeEvent(event);
 		const target = getTargetAtPoint(position, event);
-		const { scrollAxes, primaryDirection } = getDirectionState();
+		const { scrollAxis, primaryDirection } = getDirectionState();
 
 		const element = getElement();
 		const doc = element?.ownerDocument ?? document;
@@ -381,14 +390,14 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		}
 		swipeFromScrollable = Boolean(scrollableTarget && ignoreScrollableTarget);
 
-		const isInteractiveElement = target ? target.closest(DEFAULT_IGNORE_SELECTOR) : false;
+		const isInteractiveElement = closest(target, DEFAULT_IGNORE_SELECTOR);
 		if (isInteractiveElement && (!touchLike || ignoreSelectorWhenTouch)) {
 			return false;
 		}
 
-		if (ignoreScrollableAncestors && element && target && scrollAxes.length > 0) {
+		if (ignoreScrollableAncestors && element && target) {
 			const ignoreAncestors = startOptions?.ignoreScrollableAncestors ?? false;
-			if (!ignoreAncestors && hasScrollableAncestor(target, element, scrollAxes)) {
+			if (!ignoreAncestors && findScrollableAncestor(target, element, scrollAxis) != null) {
 				return false;
 			}
 		}
@@ -399,6 +408,9 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 
 		dragStartPos = position;
 		swipeStartTime = getValidTimeStamp(event.timeStamp);
+		lastDragSample = null;
+		hasStationarySample = false;
+		lastDragVelocity = { x: 0, y: 0 };
 		swipeCancelBaseline = position;
 		lastMovePos = position;
 		swipeThreshold = swipeThresholdDefault;
@@ -421,7 +433,6 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		options.onSwipeStart?.(event);
 
 		setSwiping(true);
-		lockedDirection = null;
 		isFirstPointerMove = true;
 		updateSwipeProgress(0);
 		syncDragStyles(true);
@@ -446,7 +457,6 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		if (!isSwipingInternal) return;
 
 		setSwiping(false);
-		lockedDirection = null;
 
 		dragOffset = { x: initialTransform.x, y: initialTransform.y };
 		currentSwipeDirection = undefined;
@@ -486,29 +496,36 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 	): boolean | null {
 		const { allowLeft, allowRight, allowUp, allowDown, hasHorizontal, hasVertical } =
 			getDirectionState();
-		const absDeltaX = Math.abs(deltaX);
-		const absDeltaY = Math.abs(deltaY);
-		const useVerticalAxis =
-			hasVertical && deltaY !== 0 && (!hasHorizontal || absDeltaY >= absDeltaX);
+		// Swiping toward the axis start edge (down/right) is allowed when scrolled to the start;
+		// toward the end edge (up/left) when scrolled to the end.
+		const canSwipeOnAxis = (
+			delta: number,
+			scrollOffset: number,
+			maxScrollOffset: number,
+			allowTowardStart: boolean,
+			allowTowardEnd: boolean
+		) =>
+			(delta > 0 && scrollOffset <= 0 && allowTowardStart) ||
+			(delta < 0 && scrollOffset >= Math.max(0, maxScrollOffset) && allowTowardEnd);
 
-		if (useVerticalAxis) {
-			const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
-			const atTop = scrollTarget.scrollTop <= 0;
-			const atBottom = scrollTarget.scrollTop >= maxScrollTop;
-			const canSwipeDown = deltaY > 0 && atTop && allowDown;
-			const canSwipeUp = deltaY < 0 && atBottom && allowUp;
-			return canSwipeDown || canSwipeUp;
+		if (hasVertical && deltaY !== 0) {
+			return canSwipeOnAxis(
+				deltaY,
+				scrollTarget.scrollTop,
+				scrollTarget.scrollHeight - scrollTarget.clientHeight,
+				allowDown,
+				allowUp
+			);
 		}
 
-		const useHorizontalAxis =
-			hasHorizontal && deltaX !== 0 && (!hasVertical || absDeltaX > absDeltaY);
-		if (useHorizontalAxis) {
-			const maxScrollLeft = Math.max(0, scrollTarget.scrollWidth - scrollTarget.clientWidth);
-			const atLeft = scrollTarget.scrollLeft <= 0;
-			const atRight = scrollTarget.scrollLeft >= maxScrollLeft;
-			const canSwipeRight = deltaX > 0 && atLeft && allowRight;
-			const canSwipeLeft = deltaX < 0 && atRight && allowLeft;
-			return canSwipeRight || canSwipeLeft;
+		if (hasHorizontal && deltaX !== 0) {
+			return canSwipeOnAxis(
+				deltaX,
+				scrollTarget.scrollLeft,
+				scrollTarget.scrollWidth - scrollTarget.clientWidth,
+				allowRight,
+				allowLeft
+			);
 		}
 
 		return null;
@@ -579,6 +596,8 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 				if (moveTime !== null) {
 					swipeStartTime = moveTime;
 				}
+				lastDragSample = null;
+				hasStationarySample = false;
 			}
 		}
 
@@ -609,22 +628,9 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		const dirState = getDirectionState();
 		const { allowLeft, allowRight, allowUp, allowDown, hasHorizontal, hasVertical } = dirState;
 
-		if (lockedDirection === null && hasHorizontal && hasVertical) {
-			const movementDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-			if (movementDistance >= MIN_DRAG_THRESHOLD) {
-				lockedDirection = Math.abs(deltaX) > Math.abs(deltaY) ? 'horizontal' : 'vertical';
-			}
-		}
-
 		let candidate: SwipeDirection | undefined;
 		if (!intendedSwipeDirection) {
-			if (lockedDirection === 'vertical') {
-				if (deltaY > 0) candidate = 'down';
-				else if (deltaY < 0) candidate = 'up';
-			} else if (lockedDirection === 'horizontal') {
-				if (deltaX > 0) candidate = 'right';
-				else if (deltaX < 0) candidate = 'left';
-			} else if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+			if (Math.abs(deltaX) >= Math.abs(deltaY)) {
 				candidate = deltaX > 0 ? 'right' : 'left';
 			} else {
 				candidate = deltaY > 0 ? 'down' : 'up';
@@ -663,21 +669,11 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		let newOffsetX = initialTransform.x;
 		let newOffsetY = initialTransform.y;
 
-		if (lockedDirection === 'horizontal') {
-			if (hasHorizontal) {
-				newOffsetX += dampedDelta.x;
-			}
-		} else if (lockedDirection === 'vertical') {
-			if (hasVertical) {
-				newOffsetY += dampedDelta.y;
-			}
-		} else {
-			if (hasHorizontal) {
-				newOffsetX += dampedDelta.x;
-			}
-			if (hasVertical) {
-				newOffsetY += dampedDelta.y;
-			}
+		if (hasHorizontal) {
+			newOffsetX += dampedDelta.x;
+		}
+		if (hasVertical) {
+			newOffsetY += dampedDelta.y;
 		}
 
 		// Only rewrite drag styles when the drag offset actually changed. `syncDragStyles` writes the
@@ -864,7 +860,6 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 		}
 
 		setSwiping(false);
-		lockedDirection = null;
 		resetPendingSwipeState();
 		sawPrimaryButtonsOnMove = false;
 
@@ -890,12 +885,14 @@ export function createSwipeGesture(options: SwipeGestureOptions) {
 			const ageMs = endTime - lastSample.time;
 			if (ageMs <= MAX_RELEASE_VELOCITY_AGE_MS) {
 				const sampleDurationMs = Math.max(ageMs, MIN_RELEASE_VELOCITY_DURATION_MS);
-				const sampleVelocityX = (resolvedDragOffset.x - lastSample.x) / sampleDurationMs;
-				const sampleVelocityY = (resolvedDragOffset.y - lastSample.y) / sampleDurationMs;
-				if (sampleVelocityX !== 0) {
+				const deltaFromLastSampleX = resolvedDragOffset.x - lastSample.x;
+				const deltaFromLastSampleY = resolvedDragOffset.y - lastSample.y;
+				const sampleVelocityX = deltaFromLastSampleX / sampleDurationMs;
+				const sampleVelocityY = deltaFromLastSampleY / sampleDurationMs;
+				if (Math.abs(deltaFromLastSampleX) >= MIN_VELOCITY_SAMPLE_DISTANCE) {
 					releaseVelocityX = sampleVelocityX;
 				}
-				if (sampleVelocityY !== 0) {
+				if (Math.abs(deltaFromLastSampleY) >= MIN_VELOCITY_SAMPLE_DISTANCE) {
 					releaseVelocityY = sampleVelocityY;
 				}
 			} else {

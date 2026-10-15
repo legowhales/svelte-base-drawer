@@ -1,6 +1,6 @@
 # svelte-base-drawer
 
-A Svelte 5 port of [Base UI's Drawer](https://base-ui.com/react/components/drawer) (v1.7.0), built on [bits-ui](https://bits-ui.com) Dialog.
+A Svelte 5 port of [Base UI's Drawer](https://base-ui.com/react/components/drawer) (v1.9.0), built on [bits-ui](https://bits-ui.com) Dialog.
 
 A drawer (bottom sheet) with mobile-grade gesture handling: the swipe engine, touch-scroll arbitration and release physics are a faithful port of Base UI's `useSwipeDismiss`, while focus management, portals and accessibility come from bits-ui Dialog.
 
@@ -76,7 +76,7 @@ The anatomy mirrors Base UI:
 | `Drawer.Provider` + `.Indent` / `.IndentBackground` | Opt-in iOS-style scale-down of the app surface                                        |
 | `Drawer.VirtualKeyboardProvider`                    | Opt-in: keeps focused fields visible above the mobile virtual keyboard                |
 
-Elements marked `data-swipe-ignore` never start a swipe.
+Elements marked `data-swipe-ignore` never start a swipe. On touch, `data-swipe-ignore="x"` (or `"y"`) hands drags along that axis to the element instead — e.g. a custom horizontal slider inside a bottom drawer — while drags along the drawer's own axis still swipe it.
 
 ## Styling
 

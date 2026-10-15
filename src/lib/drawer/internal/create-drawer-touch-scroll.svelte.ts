@@ -1,6 +1,6 @@
 /**
  * Touch scroll interception for the drawer viewport.
- * Port of base-ui v1.7.0 DrawerViewport touch handling.
+ * Port of base-ui v1.9.0 DrawerViewport touch handling.
  *
  * The critical piece for mobile: a single capture-phase `touchmove` listener on
  * the document decides between native scrolling and the drawer swipe, and when
@@ -14,11 +14,13 @@ import type { VirtualKeyboardHooks } from './create-virtual-keyboard.svelte.js';
 import {
 	type SwipeDirection,
 	type ScrollAxis,
+	AXIS_SWIPE_IGNORE_SELECTORS,
+	SWIPE_IGNORE_SELECTOR,
+	closest,
 	findScrollableTouchTarget,
 	hasScrollableContentOnAxis,
 	isAtSwipeStartEdge,
 	canSwipeFromScrollEdgeOnMove,
-	isSwipeIgnoredTarget,
 	isEventOnRangeInput,
 	shouldIgnoreSwipeForTextSelection,
 	getElementAtPoint,
@@ -30,13 +32,15 @@ import {
 const AXIS_LOCK_SLOP = 6;
 const AXIS_LOCK_BIAS = 2;
 
-interface TouchScrollState {
+export interface TouchScrollState {
 	startX: number;
 	startY: number;
 	lastX: number;
 	lastY: number;
+	startedInPopup: boolean;
 	scrollTarget: HTMLElement | null;
-	hasCrossAxisScrollableContent: boolean;
+	/** A native cross-axis scroller, or an element marked with the cross-axis `data-swipe-ignore` value */
+	hasCrossAxisGestureTarget: boolean;
 	/** null = undecided, true = swipe claimed, false = native scroll */
 	allowSwipe: boolean | null;
 	preserveNativeCrossAxisScroll: boolean;
@@ -47,6 +51,8 @@ interface TouchScrollState {
 export interface DrawerTouchScrollOptions {
 	/** The root element (viewport, falling back to popup) */
 	rootElement: () => HTMLElement | null;
+	/** The popup element */
+	popupElement: () => HTMLElement | null;
 	/** Whether the drawer is open */
 	active: () => boolean;
 	/** The primary swipe direction */
@@ -240,19 +246,28 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 
 		getVirtualKeyboard()?.onTouchStart(event);
 
-		ignoreTouchSwipe = isSwipeIgnoredTarget(elementAtPoint);
+		const direction = getDirection();
+		const scrollAxis = getScrollAxis(direction);
+		const crossAxis = getCrossScrollAxis(direction);
+
+		// `x`/`y` hand touch drags along that axis to the element. Any value other than the
+		// cross-axis one ignores the swipe outright; a cross-axis element is arbitrated like a
+		// native cross-axis scroller below.
+		ignoreTouchSwipe =
+			closest(
+				elementAtPoint,
+				`${SWIPE_IGNORE_SELECTOR}:not(${AXIS_SWIPE_IGNORE_SELECTORS[crossAxis]})`
+			) !== null;
 		if (ignoreTouchSwipe) {
 			touchState = null;
 			return;
 		}
 
-		const direction = getDirection();
-		const scrollAxis = getScrollAxis(direction);
-		const crossAxis = getCrossScrollAxis(direction);
-
 		const scrollTarget = findScrollableTouchTarget(target, root, scrollAxis);
-		const hasCrossAxisScrollableContent =
-			findScrollableTouchTarget(target, root, crossAxis) !== null;
+		const hasCrossAxisGestureTarget =
+			findScrollableTouchTarget(target, root, crossAxis) !== null ||
+			closest(elementAtPoint, AXIS_SWIPE_IGNORE_SELECTORS[crossAxis]) !== null;
+		const popup = untrack(options.popupElement);
 
 		let allowSwipe: boolean | null = null;
 		if (scrollTarget) {
@@ -265,8 +280,9 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 			startY: touch.clientY,
 			lastX: touch.clientX,
 			lastY: touch.clientY,
+			startedInPopup: Boolean(popup && elementAtPoint && popup.contains(elementAtPoint)),
 			scrollTarget,
-			hasCrossAxisScrollableContent,
+			hasCrossAxisGestureTarget,
 			allowSwipe,
 			preserveNativeCrossAxisScroll: false,
 			drawerAxisAttributed: false
@@ -305,6 +321,10 @@ export function createDrawerTouchScroll(options: DrawerTouchScrollOptions) {
 	}
 
 	return {
+		/** The current touch gesture's arbitration state, read by the swipe `canStart` gate. */
+		get state(): TouchScrollState | null {
+			return touchState;
+		},
 		notePointerDown,
 		notePointerSettled,
 		handlers: {
@@ -325,7 +345,8 @@ function updateTouchPosition(ts: TouchScrollState, touch: Touch) {
 }
 
 /**
- * Arbitrates a touchmove between the drawer swipe and a native cross-axis scroll.
+ * Arbitrates a touchmove between the drawer swipe and a cross-axis gesture: a native scroll, or an
+ * element marked with the cross-axis `data-swipe-ignore` value.
  * Returns `true` when the move must be left alone — either because the cross axis
  * already won the gesture, or because neither axis has passed the slop yet and
  * the gesture cannot be attributed.
@@ -342,7 +363,7 @@ function shouldYieldTouchMove(
 	// has won would let the pre-attribution branches below fire mid-drag (the slop
 	// is measured from the touch origin, which is never re-baselined), freezing
 	// the popup and dropping `preventDefault()`.
-	if (ts.drawerAxisAttributed || ts.allowSwipe === true || !ts.hasCrossAxisScrollableContent) {
+	if (ts.drawerAxisAttributed || ts.allowSwipe === true || !ts.hasCrossAxisGestureTarget) {
 		return false;
 	}
 

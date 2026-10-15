@@ -1,6 +1,6 @@
 /**
  * Keyboard-aware focus and scroll handling for bottom-sheet drawers with form
- * fields. Port of base-ui v1.7.0 DrawerVirtualKeyboardProvider.
+ * fields. Port of base-ui v1.9.0 DrawerVirtualKeyboardProvider.
  *
  * Responsibilities:
  * - Expose the software keyboard inset as `--drawer-keyboard-inset` on the
@@ -18,6 +18,7 @@ import { untrack } from 'svelte';
 import { Context } from 'runed';
 import {
 	clamp,
+	closest,
 	findScrollableTouchTarget,
 	getElementAtPoint,
 	getEventTarget,
@@ -29,10 +30,6 @@ export const DRAWER_KEYBOARD_INSET_VAR = '--drawer-keyboard-inset';
 
 const KEYBOARD_RESIZE_THRESHOLD = 60;
 const KEYBOARD_VISIBILITY_MARGIN = 16;
-// Extra breathing room (px) added below the focused field, on top of its
-// measured keyboard overlap, so the field can be scrolled clear of the keyboard
-// instead of ending up flush against it. Only applied when there is overlap.
-const KEYBOARD_SCROLL_SLACK = 48;
 // Cadence of the settle-watching realign passes after focus moves with the
 // keyboard open: long enough for a smooth scroll to show progress between
 // passes, short enough to recover quickly from a scroll canceled by WebKit's
@@ -72,6 +69,8 @@ interface ScrollAdjustment {
 interface KeyboardVisualViewport {
 	readonly top: number;
 	readonly bottom: number;
+	// The browser is still resizing the layout viewport to the visual viewport.
+	readonly resizing: boolean;
 }
 
 interface KeyboardTouchTarget {
@@ -124,6 +123,9 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 	let focusedKeyboardTarget: HTMLElement | null = null;
 	let keyboardScrollAdjustment: ScrollAdjustment | null = null;
 	let programmaticKeyboardFocus = false;
+	// Keyboard viewport reader of the active effect run (it holds per-run state);
+	// the touch path reads it outside the effect.
+	let getKeyboardViewport: (() => KeyboardVisualViewport | null) | null = null;
 
 	let frameId = 0;
 	const keyboardFocusFrame = {
@@ -195,7 +197,11 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		}
 
 		element.style.overflowAnchor = 'none';
-		element.style.paddingBottom = `${adjustment.computedPaddingBottom + roundedSlack}px`;
+		// The baseline below the content is at least the visibility margin, so the last field
+		// never ends flush against the keyboard when the container's own padding is smaller.
+		element.style.paddingBottom = `${
+			roundedSlack + Math.max(adjustment.computedPaddingBottom, KEYBOARD_VISIBILITY_MARGIN)
+		}px`;
 		element.style.scrollPaddingBottom = `${
 			adjustment.computedScrollPaddingBottom + KEYBOARD_VISIBILITY_MARGIN
 		}px`;
@@ -244,21 +250,54 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		let keyboardScrollDestination = 0;
 		let keyboardScrollChecks = 0;
 		let keyboardScrollObserved = -1;
+		// Visual viewport height last seen while the keyboard overlapped the layout viewport.
+		let keyboardVisualHeight = -1;
+		let smallViewportProbe: HTMLElement | null = null;
+
+		// New Chrome on iOS shrinks `svh` for the keyboard, then the layout viewport down to
+		// the visual viewport, moving fixed content itself. Remembering the keyboard's visual
+		// height keeps it detected once the overlap is gone; a substantial change in visual
+		// height clears it.
+		const readKeyboardViewport = (): KeyboardVisualViewport | null => {
+			if (!visualViewport || visualViewport.scale !== 1) {
+				return null;
+			}
+
+			const layoutHeight = win.innerHeight;
+			const visualHeight = visualViewport.height;
+
+			if (layoutHeight - visualHeight > KEYBOARD_RESIZE_THRESHOLD) {
+				keyboardVisualHeight = visualHeight;
+			} else if (Math.abs(visualHeight - keyboardVisualHeight) > KEYBOARD_RESIZE_THRESHOLD) {
+				keyboardVisualHeight = -1;
+				return null;
+			}
+
+			if (!smallViewportProbe) {
+				smallViewportProbe = doc.createElement('div');
+				smallViewportProbe.style.cssText = 'position:fixed;top:0;height:100svh;visibility:hidden';
+				doc.body.appendChild(smallViewportProbe);
+			}
+
+			const layoutFollowsKeyboard =
+				smallViewportProbe.offsetHeight - visualHeight <= KEYBOARD_RESIZE_THRESHOLD;
+			const top = Math.max(0, visualViewport.offsetTop);
+
+			return {
+				top,
+				// Fixed content already sits above the keyboard, so an inset would lift it twice.
+				bottom: layoutFollowsKeyboard ? layoutHeight : Math.min(layoutHeight, top + visualHeight),
+				resizing: layoutFollowsKeyboard && Math.abs(layoutHeight - visualHeight) >= 1
+			};
+		};
+
+		getKeyboardViewport = readKeyboardViewport;
 
 		const setDrawerKeyboardInset = (inset: number) => {
 			rootElement.style.setProperty(
 				DRAWER_KEYBOARD_INSET_VAR,
 				`${Math.max(0, Math.ceil(inset))}px`
 			);
-		};
-
-		const clearFocusedKeyboardTarget = () => {
-			focusedKeyboardTarget = null;
-			keyboardScrollElement = null;
-			setDrawerKeyboardInset(0);
-			restoreKeyboardScrollAdjustment();
-			keyboardFocusFrame.cancel();
-			keyboardRealignTimeout.clear();
 		};
 
 		// WebKit's native reveal scroll can move the page even while the scroll
@@ -274,22 +313,21 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			// open here. bits-ui dialogs are always modal, and a field focused
 			// inside a nested drawer is never tracked by this provider (it lives
 			// outside `rootElement`), so the tracked-target check covers both.
-			if (!focusedKeyboardTarget || getKeyboardVisualViewport(win) == null) {
+			if (
+				!focusedKeyboardTarget ||
+				(win.scrollX === baseScrollX && win.scrollY === baseScrollY) ||
+				readKeyboardViewport() == null
+			) {
 				return false;
 			}
 
-			if (win.scrollX !== baseScrollX || win.scrollY !== baseScrollY) {
-				// Force an instant jump: the two-argument form defaults `behavior` to
-				// `auto`, which obeys the page's `scroll-behavior`, so a global
-				// `scroll-behavior: smooth` would animate the restore. The
-				// measurements that follow assume the page is already back at rest,
-				// and a smooth restore also re-emits `scroll`, re-entering this
-				// handler.
-				win.scrollTo({ left: baseScrollX, top: baseScrollY, behavior: 'instant' });
-				return true;
-			}
-
-			return false;
+			// Force an instant jump: the two-argument form defaults `behavior` to
+			// `auto`, which obeys the page's `scroll-behavior`, so a global
+			// `scroll-behavior: smooth` would animate the restore. The measurements
+			// that follow assume the page is already back at rest, and a smooth
+			// restore also re-emits `scroll`, re-entering this handler.
+			win.scrollTo({ left: baseScrollX, top: baseScrollY, behavior: 'instant' });
+			return true;
 		};
 
 		// Focus moved by the drawer itself goes through
@@ -341,7 +379,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			// the resting viewport.
 			restoreWindowScroll();
 
-			const keyboardViewport = getKeyboardVisualViewport(win);
+			const keyboardViewport = readKeyboardViewport();
 			if (!keyboardViewport) {
 				setDrawerKeyboardInset(0);
 				restoreKeyboardScrollAdjustment();
@@ -359,7 +397,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			const scrollTargetRect = scrollTarget.getBoundingClientRect();
 			const clippedBottom = Math.min(scrollTargetRect.bottom, keyboardViewport.bottom);
 			const overlap = Math.max(0, scrollTargetRect.bottom - keyboardViewport.bottom);
-			setKeyboardScrollSlack(scrollTarget, overlap > 0 ? overlap + KEYBOARD_SCROLL_SLACK : 0);
+			setKeyboardScrollSlack(scrollTarget, overlap);
 
 			const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
 			if (maxScrollTop <= 0) return;
@@ -375,8 +413,10 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 				(targetRect.top + targetRect.bottom - visibleTop - visibleBottom) / 2;
 			const destination = Math.round(clamp(nextScrollTop, 0, maxScrollTop));
 
+			// WebKit restarts a smooth scroll re-issued while the layout viewport resizes.
 			const settled =
 				keyboardScrollElement === scrollTarget &&
+				!keyboardViewport.resizing &&
 				Math.abs(keyboardScrollDestination - destination) <= 1;
 
 			if (!settled) {
@@ -446,6 +486,16 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			keyboardRealignTimeout.start(KEYBOARD_REALIGN_INTERVAL, realign);
 		};
 
+		// A tap's compatibility mousedown moves focus before mouseup/click hit-test the
+		// same point. Defer releasing the inset and slack (the next alignment pass finds
+		// no target and restores them) so the target stays under the finger.
+		const releaseFocusedKeyboardTarget = () => {
+			focusedKeyboardTarget = null;
+			keyboardVisualHeight = -1;
+			keyboardRealignTimeout.clear();
+			scheduleKeyboardFocusAlignment();
+		};
+
 		const captureFocusedKeyboardTarget = (eventTarget: EventTarget | null) => {
 			// Resolve through the same path as taps so contentEditable hosts (and
 			// labelled controls) are normalized identically for both paths.
@@ -461,6 +511,16 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			}
 			focusedKeyboardTarget = target;
 			return true;
+		};
+
+		const handleFocus = (event: FocusEvent) => {
+			const target = focusedKeyboardTarget;
+			// iOS 27 dispatches focus before recording the native focus options.
+			// Reapply preventScroll here, before focusin, so keyboard-arrow
+			// navigation retains it.
+			if (restorePreemptedFocus && target && target === getEventTarget(event)) {
+				target.focus({ preventScroll: true });
+			}
 		};
 
 		const handleFocusIn = (event: FocusEvent) => {
@@ -483,14 +543,14 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 				// A handler that ends focus entirely emits no `focusin` to reconcile
 				// from; that case is covered by clearing the suppression flag above so
 				// its `focusout` is handled.
-				clearFocusedKeyboardTarget();
+				releaseFocusedKeyboardTarget();
 				return;
 			}
 
 			// Covers every way focus can land with the keyboard already up: native
 			// moves (the keyboard's previous/next arrows) and the tap path (which
 			// suppresses `focusout` handling via the programmatic flag).
-			if (getKeyboardVisualViewport(win) != null) {
+			if (readKeyboardViewport() != null) {
 				scheduleDelayedKeyboardRealign();
 			}
 
@@ -499,15 +559,15 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 
 		const handleFocusOut = (event: FocusEvent) => {
 			// The blur inside `focusKeyboardInputWithoutPageScroll` is followed
-			// synchronously by a re-focus; clearing state here would drop the
-			// keyboard inset for a frame.
+			// synchronously by a re-focus; handling it here would run the reveal
+			// against the off-screen geometry.
 			if (programmaticKeyboardFocus) {
 				return;
 			}
 
 			if (captureFocusedKeyboardTarget(event.relatedTarget)) {
 				const target = focusedKeyboardTarget;
-				const keyboardViewport = getKeyboardVisualViewport(win);
+				const keyboardViewport = readKeyboardViewport();
 				// The delayed realign passes are scheduled by the `focusin` that
 				// follows once focus lands on the captured target.
 				if (target && keyboardViewport) {
@@ -517,7 +577,7 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 				return;
 			}
 
-			clearFocusedKeyboardTarget();
+			releaseFocusedKeyboardTarget();
 		};
 
 		const handleViewportUpdate = () => {
@@ -531,9 +591,12 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		if (visualViewport) {
 			visualViewport.addEventListener('resize', handleViewportUpdate);
 			visualViewport.addEventListener('scroll', handleViewportUpdate);
+			// Chrome can keep resizing the layout viewport after visual viewport events stop.
+			win.addEventListener('resize', handleViewportUpdate);
 			cleanups.push(() => {
 				visualViewport.removeEventListener('resize', handleViewportUpdate);
 				visualViewport.removeEventListener('scroll', handleViewportUpdate);
+				win.removeEventListener('resize', handleViewportUpdate);
 			});
 		}
 
@@ -552,16 +615,21 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		// reveal scroll WebKit canceled. A later focus or viewport change
 		// reschedules alignment if it's still needed.
 		const cancelKeyboardRealignOnPointerDown = () => {
-			keyboardFocusFrame.cancel();
+			// Preserve a pending cleanup when focus has already left the keyboard input.
+			if (focusedKeyboardTarget) {
+				keyboardFocusFrame.cancel();
+			}
 			keyboardRealignTimeout.clear();
 			keyboardScrollElement = null;
 		};
 
+		doc.addEventListener('focus', handleFocus, true);
 		doc.addEventListener('focusin', handleFocusIn, true);
 		doc.addEventListener('focusout', handleFocusOut, true);
 		win.addEventListener('scroll', handleWindowScroll);
 		doc.addEventListener('pointerdown', cancelKeyboardRealignOnPointerDown, true);
 		cleanups.push(() => {
+			doc.removeEventListener('focus', handleFocus, true);
 			doc.removeEventListener('focusin', handleFocusIn, true);
 			doc.removeEventListener('focusout', handleFocusOut, true);
 			win.removeEventListener('scroll', handleWindowScroll);
@@ -575,7 +643,12 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 		return () => {
 			cleanups.forEach((cleanup) => cleanup());
 			consumePreemptedFocus();
-			clearFocusedKeyboardTarget();
+			focusedKeyboardTarget = null;
+			restoreKeyboardScrollAdjustment();
+			keyboardFocusFrame.cancel();
+			keyboardRealignTimeout.clear();
+			getKeyboardViewport = null;
+			smallViewportProbe?.remove();
 			rootElement.style.removeProperty(DRAWER_KEYBOARD_INSET_VAR);
 		};
 	});
@@ -682,18 +755,18 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			// can reposition the caret, rather than blurring and re-focusing.
 			if (
 				keyboardFocusTarget.ownerDocument.activeElement === keyboardFocusTarget &&
-				(!win.visualViewport || getKeyboardVisualViewport(win) != null)
+				(!win.visualViewport || getKeyboardViewport?.() != null)
 			) {
 				resetTouchTrackingState();
 				return;
 			}
 
 			// iOS only opens the software keyboard when focus happens synchronously
-			// inside the touch gesture. The flag suppresses the `focusout` cleanup
-			// the intermediate blur would otherwise trigger, so the keyboard inset
-			// isn't dropped for a frame between the blur and the re-focus. It is
-			// cleared by the `focusin` that lands, so only that blur is suppressed;
-			// the `finally` is the backstop for a target that never takes focus.
+			// inside the touch gesture. The flag suppresses the `focusout` handling
+			// the intermediate blur would otherwise trigger, so it doesn't measure the
+			// input while its geometry is overridden off-screen. It is cleared by the
+			// `focusin` that lands, so only that blur is suppressed; the `finally` is
+			// the backstop for a target that never takes focus.
 			event.preventDefault();
 			programmaticKeyboardFocus = true;
 			try {
@@ -721,6 +794,19 @@ export function createVirtualKeyboard(options: VirtualKeyboardOptions): VirtualK
 			// events, including `click`; redispatch an untrusted replacement on the
 			// original tap target so click handlers still run with the tap coordinates.
 			dispatchKeyboardClick(keyboardClickTarget, touch);
+			// Label activation refocuses its control without preventScroll. While the
+			// keyboard is opening, WebKit replaces the pending focus options even for an
+			// already-focused input. Reapply preventScroll without blurring or undoing a
+			// consumer's focus change. For a contenteditable descendant this refocus of
+			// the already-focused host is a no-op for the selection (both WebKit and
+			// Blink keep a selection already inside the editing host), so the caret
+			// placed above survives.
+			if (
+				keyboardClickTarget !== keyboardFocusTarget &&
+				keyboardFocusTarget.ownerDocument.activeElement === keyboardFocusTarget
+			) {
+				keyboardFocusTarget.focus({ preventScroll: true });
+			}
 			resetTouchTrackingState();
 			return;
 		}
@@ -763,7 +849,7 @@ function resolveKeyboardInputTarget(target: EventTarget | null): HTMLElement | n
 		return target.isContentEditable ? getContentEditableHost(target) : target;
 	}
 
-	const label = target.closest('label');
+	const label = closest(target, 'label') as HTMLLabelElement | null;
 	const control = label?.control ?? null;
 
 	return isHTMLElement(control) && isKeyboardInputElement(control) ? control : null;
@@ -888,7 +974,7 @@ function resolveKeyboardTouchTargetFromPoint(
 	// interactive element — that would suppress its click and focus a neighboring
 	// field instead. Returning the blocked sentinel (rather than null) stops the
 	// caller from falling back to the touchstart target.
-	if (exactTarget?.closest(INTERACTIVE_TAP_SELECTOR) != null) {
+	if (closest(exactTarget, INTERACTIVE_TAP_SELECTOR) != null) {
 		return KEYBOARD_TAP_BLOCKED;
 	}
 
@@ -975,24 +1061,4 @@ function findKeyboardScrollTarget(target: HTMLElement, root: HTMLElement): HTMLE
 		findScrollableTouchTarget(scrollStart, root, 'vertical') ??
 		findScrollableTouchTarget(scrollStart, root, 'vertical', true)
 	);
-}
-
-function getKeyboardVisualViewport(win: Window): KeyboardVisualViewport | null {
-	const visualViewport = win.visualViewport;
-
-	if (!visualViewport || visualViewport.scale !== 1) {
-		return null;
-	}
-
-	const reducedHeight = win.innerHeight - visualViewport.height;
-	// Treat small viewport changes as browser chrome movement, not the keyboard.
-	if (reducedHeight <= KEYBOARD_RESIZE_THRESHOLD) {
-		return null;
-	}
-
-	const top = Math.max(0, visualViewport.offsetTop);
-	return {
-		top,
-		bottom: Math.min(win.innerHeight, top + visualViewport.height)
-	};
 }

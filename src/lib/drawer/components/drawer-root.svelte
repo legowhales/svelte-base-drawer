@@ -147,14 +147,26 @@
 		if (!CloseWatcherCtor) return;
 
 		const watcher = new CloseWatcherCtor();
-		const handleClose = () => {
-			untrack(() => {
+		// The browser destroys the watcher before `close` fires, so the request is
+		// handled from `cancel`, where it can still be prevented.
+		const handleCancel = (event: Event) => {
+			const rejected = untrack(() => {
+				if (!state.opts.open.current) return false;
 				state.opts.open.current = false;
+				// A consumer can reject the close (e.g. a function binding on `open`
+				// that ignores `false`), upstream's `eventDetails.cancel()`.
+				return state.opts.open.current;
 			});
+			// Keeps this watcher active for the next close request. The browser lets
+			// only one close request per user activation be prevented (non-cancelable
+			// otherwise), like a native `<dialog>`.
+			if (rejected && event.cancelable) {
+				event.preventDefault();
+			}
 		};
-		watcher.addEventListener('close', handleClose);
+		watcher.addEventListener('cancel', handleCancel);
 		return () => {
-			watcher.removeEventListener('close', handleClose);
+			watcher.removeEventListener('cancel', handleCancel);
 			watcher.destroy();
 		};
 	});

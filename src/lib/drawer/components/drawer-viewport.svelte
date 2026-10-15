@@ -36,10 +36,12 @@
 	});
 
 	// Capture-phase native touchmove listener: decides scroll vs swipe and
-	// drives the gesture engine natively.
+	// drives the gesture engine natively. Attached only while open: a
+	// non-passive document listener makes all touch scrolling wait on the main
+	// thread (the viewport stays mounted through the exit animation).
 	$effect(() => {
 		const root = viewportEl ?? drawer.popupElement;
-		if (!root) return;
+		if (!root || !drawer.isOpen) return;
 		return drawer.touchScroll.setupNativeTouchMoveListener(root);
 	});
 

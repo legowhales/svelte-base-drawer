@@ -3,9 +3,16 @@ export type ScrollAxis = 'horizontal' | 'vertical';
 
 /**
  * Elements marked with this attribute (or inside one) never start a drawer swipe.
- * Mirrors base-ui's `data-base-ui-swipe-ignore`.
+ * Mirrors base-ui's `data-base-ui-swipe-ignore`. The `x` / `y` values hand touch
+ * drags along that axis to the element instead (arbitrated like a native
+ * cross-axis scroller); any other value ignores the swipe outright.
  */
-export const SWIPE_IGNORE_SELECTOR = '[data-swipe-ignore]';
+export const SWIPE_IGNORE_ATTRIBUTE = 'data-swipe-ignore';
+export const SWIPE_IGNORE_SELECTOR = `[${SWIPE_IGNORE_ATTRIBUTE}]`;
+export const AXIS_SWIPE_IGNORE_SELECTORS: Record<ScrollAxis, string> = {
+	horizontal: `[${SWIPE_IGNORE_ATTRIBUTE}="x"]`,
+	vertical: `[${SWIPE_IGNORE_ATTRIBUTE}="y"]`
+};
 
 /** Attribute rendered by Drawer.Content — marks the scrollable content region. */
 export const DRAWER_CONTENT_ATTRIBUTE = 'data-drawer-content';
@@ -87,6 +94,31 @@ export function safelyChangePointerCapture(
 
 export function isHTMLElement(node: unknown): node is HTMLElement {
 	return node instanceof HTMLElement;
+}
+
+function isShadowRoot(node: unknown): node is ShadowRoot {
+	return typeof ShadowRoot !== 'undefined' && node instanceof ShadowRoot;
+}
+
+/**
+ * Finds the closest matching element in the composed tree, crossing slots and shadow roots
+ * (`Element.closest` stops at the shadow root). `:scope` is not supported.
+ */
+export function closest(node: Node | null | undefined, selector: string): Element | null {
+	let current = node;
+
+	while (current) {
+		if (current instanceof Element && current.matches(selector)) {
+			return current;
+		}
+
+		current =
+			(current as Element).assignedSlot ??
+			current.parentNode ??
+			(isShadowRoot(current) ? current.host : null);
+	}
+
+	return null;
 }
 
 /**
@@ -209,6 +241,25 @@ export function isScrollable(
 	return allowOverflowIntent ? element.clientWidth > 0 : element.scrollWidth > element.clientWidth;
 }
 
+export function findScrollableAncestor(
+	target: EventTarget | null,
+	root: HTMLElement,
+	axis: ScrollAxis,
+	allowOverflowIntent = false
+): HTMLElement | null {
+	// `getParentNode` crosses shadow boundaries (and slots), so a target inside a shadow root
+	// still walks up to scrollable ancestors in the light DOM. Non-HTML targets (SVG, MathML)
+	// can't scroll, but their HTML ancestors can.
+	let node: Node | null = target instanceof Element ? target : null;
+	while (node instanceof Element && node !== root && !isLastTraversableNode(node)) {
+		if (isHTMLElement(node) && isScrollable(node, axis, allowOverflowIntent)) {
+			return node;
+		}
+		node = getParentNode(node);
+	}
+	return null;
+}
+
 /**
  * Nearest scrollable ancestor of `target` on `axis`, bounded by `root`
  * (root itself is checked last). Traverses shadow boundaries.
@@ -219,32 +270,10 @@ export function findScrollableTouchTarget(
 	axis: ScrollAxis = 'vertical',
 	allowOverflowIntent = false
 ): HTMLElement | null {
-	let node: Node | null = isHTMLElement(target) ? target : null;
-	while (node && isHTMLElement(node) && node !== root && !isLastTraversableNode(node)) {
-		if (isScrollable(node, axis, allowOverflowIntent)) {
-			return node;
-		}
-		node = getParentNode(node);
-	}
-
-	return isScrollable(root, axis, allowOverflowIntent) ? root : null;
-}
-
-export function hasScrollableAncestor(
-	target: Element,
-	root: HTMLElement,
-	axes: ScrollAxis[]
-): boolean {
-	let node: Node | null = target;
-	while (node && isHTMLElement(node) && node !== root && !isLastTraversableNode(node)) {
-		for (const axis of axes) {
-			if (isScrollable(node, axis)) {
-				return true;
-			}
-		}
-		node = getParentNode(node);
-	}
-	return false;
+	return (
+		findScrollableAncestor(target, root, axis, allowOverflowIntent) ??
+		(isScrollable(root, axis, allowOverflowIntent) ? root : null)
+	);
 }
 
 export function hasScrollableContentOnAxis(scrollTarget: HTMLElement, axis: ScrollAxis): boolean {
@@ -310,11 +339,11 @@ function shouldDismissFromStartEdge(direction: SwipeDirection, axis: ScrollAxis)
 // --- Target classification ---
 
 export function isSwipeIgnoredTarget(target: Element | null): boolean {
-	return Boolean(target?.closest(SWIPE_IGNORE_SELECTOR));
+	return Boolean(closest(target, SWIPE_IGNORE_SELECTOR));
 }
 
 export function isDrawerContentTarget(target: Element | null): boolean {
-	return Boolean(target?.closest(DRAWER_CONTENT_SELECTOR));
+	return Boolean(closest(target, DRAWER_CONTENT_SELECTOR));
 }
 
 export function isRangeInput(target: EventTarget | null): target is HTMLInputElement {
