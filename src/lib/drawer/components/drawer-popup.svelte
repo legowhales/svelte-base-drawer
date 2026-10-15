@@ -172,6 +172,17 @@
 		if (sampledFrontmostHeight > 0) {
 			style['--drawer-frontmost-height'] = `${sampledFrontmostHeight}px`;
 		}
+		// A closing drawer lets taps through to what it uncovers. Upstream's
+		// popup inherits the closed viewport's `pointer-events: none`
+		// (DialogViewport); bits-ui keeps `pointer-events: auto` inline on
+		// Dialog.Content through the exit, so it's restated here. Otherwise a tap
+		// right after a nested drawer closes lands on it, outside the parent,
+		// which dismisses (or picks another option of the closing drawer). The
+		// style string changes on close anyway (the height freezes above), and
+		// the state vars it carries survive the rewrite.
+		if (!drawer.isOpen) {
+			style['pointer-events'] = 'none';
+		}
 		return style;
 	});
 

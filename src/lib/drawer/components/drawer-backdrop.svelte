@@ -32,8 +32,14 @@
 		}
 	});
 
+	// Closed (exit animation, or forceMount), the backdrop no longer takes the
+	// pointer, like upstream's `pointerEvents: !open ? 'none'` (DrawerBackdrop).
+	// `inert` rather than a style: bits-ui sets `pointer-events: auto` inline, and
+	// a template style would rewrite the attribute on close, wiping the swipe
+	// vars the engine writes imperatively (`--drawer-swipe-strength`, progress).
 	const drawerProps = $derived({
-		'data-drawer-backdrop': ''
+		'data-drawer-backdrop': '',
+		inert: !drawer.isOpen || undefined
 	});
 </script>
 
