@@ -1,0 +1,245 @@
+/* Rich-text (Tiptap) demo — full-height side drawer whose content scrolls
+   behind the software keyboard, with images that can be deleted. */
+
+.rt-backdrop {
+	--backdrop-opacity: 0.2;
+	position: fixed;
+	z-index: 50;
+	min-height: 100dvh;
+	inset: 0;
+	background-color: black;
+	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress)));
+	transition-duration: 450ms;
+	transition-property: opacity;
+	transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@supports (-webkit-touch-callout: none) {
+	.rt-backdrop {
+		position: absolute;
+	}
+}
+
+@media (prefers-color-scheme: dark) {
+	.rt-backdrop {
+		--backdrop-opacity: 0.7;
+	}
+}
+
+.rt-backdrop[data-starting-style],
+.rt-backdrop[data-ending-style] {
+	opacity: 0;
+}
+
+.rt-backdrop[data-swiping] {
+	transition-duration: 0ms;
+}
+
+.rt-backdrop[data-ending-style] {
+	transition-duration: calc(var(--drawer-swipe-strength) * 400ms);
+}
+
+.rt-viewport {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	display: flex;
+	justify-content: flex-end;
+}
+
+.rt-popup {
+	box-sizing: border-box;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 32rem;
+	height: 100%;
+	border-left: 1px solid oklch(14.5% 0 0deg);
+	background-color: white;
+	color: oklch(14.5% 0 0deg);
+	outline: 0;
+	touch-action: none;
+	box-shadow: 0.25rem 0.25rem 0 rgb(0 0 0 / 12%);
+	transition: transform 450ms cubic-bezier(0.32, 0.72, 0, 1);
+	transform: translateX(var(--drawer-swipe-movement-x));
+	will-change: transform;
+}
+
+@media (prefers-color-scheme: dark) {
+	.rt-popup {
+		border-left: 1px solid white;
+		background-color: oklch(14.5% 0 0deg);
+		color: white;
+		box-shadow: none;
+	}
+}
+
+.rt-popup[data-starting-style],
+.rt-popup[data-ending-style] {
+	transform: translateX(calc(100% + 2px));
+}
+
+.rt-popup[data-ending-style] {
+	transition-duration: calc(var(--drawer-swipe-strength) * 400ms);
+}
+
+.rt-header {
+	flex-shrink: 0;
+	padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1rem 0.75rem;
+	border-bottom: 1px solid oklch(87% 0 0deg);
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	.rt-header {
+		border-bottom: 1px solid oklch(37.1% 0 0deg);
+	}
+}
+
+.rt-header-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.rt-title {
+	flex: 1;
+	margin: 0;
+	font-size: 1rem;
+	line-height: 1.5rem;
+	font-weight: 700;
+	text-align: center;
+	cursor: default;
+}
+
+.rt-debug-toggle[aria-pressed='true'] {
+	outline: 2px solid currentColor;
+	outline-offset: -2px;
+}
+
+.rt-debug {
+	margin: 0.5rem 0 0;
+	padding: 0.375rem 0.5rem;
+	background-color: oklch(96.7% 0.001 286.375deg);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 0.6875rem;
+	line-height: 1rem;
+	white-space: pre-wrap;
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+@media (prefers-color-scheme: dark) {
+	.rt-debug {
+		background-color: oklch(21% 0.006 285.885deg);
+	}
+}
+
+.rt-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	touch-action: auto;
+	padding: 1rem 1.25rem calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+.rt-editor {
+	max-width: 40rem;
+	margin: 0 auto;
+	/* Keeps the end of the note clear of the floating toolbar. */
+	padding-bottom: 4rem;
+}
+
+.rt-toolbar {
+	position: absolute;
+	right: 0;
+	left: 0;
+	bottom: calc(var(--drawer-keyboard-inset, 0px) + 0.75rem + env(safe-area-inset-bottom, 0px));
+	z-index: 1;
+	display: flex;
+	justify-content: center;
+	gap: 0.5rem;
+	pointer-events: none;
+}
+
+.rt-toolbar .demo-button {
+	pointer-events: auto;
+	box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 15%);
+}
+
+.rt-toolbar .demo-button:disabled {
+	opacity: 0.5;
+}
+
+.rt-prosemirror {
+	min-height: 12rem;
+	outline: none;
+	font-size: 1rem;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.rt-prosemirror :where(h2, p, ul) {
+	margin: 0;
+}
+
+.rt-prosemirror > * + * {
+	margin-top: 0.75em;
+}
+
+.rt-prosemirror h2 {
+	font-size: 1.375rem;
+	line-height: 1.3;
+}
+
+.rt-prosemirror ul {
+	padding-left: 1.25rem;
+	list-style: disc;
+}
+
+.rt-media {
+	white-space: normal;
+}
+
+.rt-media-frame {
+	position: relative;
+}
+
+.rt-media.is-selected .rt-media-frame {
+	outline: 2px solid oklch(42.4% 0.199 265.638deg);
+	outline-offset: 2px;
+}
+
+.rt-media-image {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.rt-media-delete {
+	position: absolute;
+	top: 0.5rem;
+	right: 0.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background-color: rgb(0 0 0 / 60%);
+	color: white;
+	cursor: pointer;
+}
+
+@media (hover: hover) {
+	.rt-media-delete:hover {
+		background-color: rgb(0 0 0 / 80%);
+	}
+}

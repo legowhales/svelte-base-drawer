@@ -4,6 +4,7 @@
 	import SnapPoints from '../demos/SnapPoints.svelte';
 	import Nested from '../demos/Nested.svelte';
 	import VirtualKeyboard from '../demos/VirtualKeyboard.svelte';
+	import RichText from '../demos/RichText.svelte';
 	import Indent from '../demos/Indent.svelte';
 	import MobileNav from '../demos/MobileNav.svelte';
 	import SwipeToOpen from '../demos/SwipeToOpen.svelte';
@@ -89,6 +90,13 @@
 			component: VirtualKeyboard
 		},
 		{
+			id: 'rich-text',
+			title: 'Rich text editor',
+			description:
+				'A Tiptap editor in a full-height side drawer: the caret lands where you tap, and deleted images keep the content reachable above the keyboard.',
+			component: RichText
+		},
+		{
 			id: 'indent',
 			title: 'Indent effect',
 			description: 'The app surface scales down behind the drawer, iOS style.',
@@ -129,7 +137,11 @@
 		['[data-expanded]', 'present when snapped to the largest snap point'],
 		['[data-nested] / [data-nested-drawer-open]', 'nesting state, for stacked-cards styling'],
 		['[data-starting-style] / [data-ending-style]', 'enter/exit transition hooks (from bits-ui)'],
-		['[data-swipe-ignore]', 'opt-out: no swipe ever starts on this element']
+		['[data-swipe-ignore]', 'opt-out: no swipe ever starts on this element'],
+		[
+			'[data-swipe-ignore="x"] / ="y"',
+			'touch drags along that axis go to the element (e.g. a custom slider in a bottom drawer)'
+		]
 	];
 </script>
 
@@ -170,7 +182,7 @@
 			<p class="doc-tagline">
 				A Svelte 5 port of <a href="https://base-ui.com/react/components/drawer">Base UI's Drawer</a
 				>
-				(v1.7.0), built on <a href="https://bits-ui.com">bits-ui</a> Dialog. Swipe to dismiss with momentum,
+				(v1.9.0), built on <a href="https://bits-ui.com">bits-ui</a> Dialog. Swipe to dismiss with momentum,
 				snap points, nested drawers, swipe to open, virtual keyboard support. Unstyled — you own the CSS.
 				MIT licensed, not affiliated with MUI.
 			</p>
